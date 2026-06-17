@@ -1,1 +1,138 @@
-const situationInput=document.getElementById("situation"),generateBtn=document.getElementById("generateBtn"),clearBtn=document.getElementById("clearBtn"),resultBox=document.getElementById("result"),saveBtn=document.getElementById("saveBtn"),historyList=document.getElementById("historyList"),clearHistoryBtn=document.getElementById("clearHistoryBtn");let latestGuidance="";const data=[{keywords:["job","career","boss","work","quit"],principle:"Seek wisdom, count the cost, and avoid decisions driven by fear, pride, or anger.",story:"Joseph remained faithful through hardship and delay before being placed in greater responsibility.",scriptures:"James 1:5; Proverbs 3:5-6; Proverbs 15:22; Luke 14:28",guidance:"Write down your reasons. Separate facts from emotions. Seek wise counsel."},{keywords:["family","conflict","argument","forgive","anger"],principle:"Pursue peace where possible, speak truth with humility, and do not repay wrong with wrong.",story:"David had opportunities to harm Saul but chose restraint and trusted God with justice.",scriptures:"Proverbs 15:1; Matthew 5:9; Romans 12:18",guidance:"Pause before responding. Choose a gentle answer. Set wise boundaries if needed."}];function choose(t){let l=t.toLowerCase();return data.find(x=>x.keywords.some(k=>l.includes(k)))||{principle:"Biblical wisdom begins with humility, prayer, patience, wise counsel, and examining the fruit of a decision.",story:"Solomon asked God for wisdom before leading others.",scriptures:"James 1:5; Proverbs 3:5-6; Proverbs 11:14; Galatians 5:22-23",guidance:"Slow down and identify the real issue. Ask what choice reflects wisdom, love, truth, patience, responsibility, and obedience to God."}}function generate(t){let x=choose(t);return `Situation:\n${t}\n\nBiblical Principle:\n${x.principle}\n\nRelated Biblical Story:\n${x.story}\n\nKing James Version Scripture References:\n${x.scriptures}\n\nPlain-Language Guidance:\n${x.guidance}\n\nDisclaimer:\nWisdom provides spiritual and biblical guidance only. It is not legal, medical, mental health, financial, or emergency advice.`}function getHistory(){return JSON.parse(localStorage.getItem("wisdomHistory")||"[]")}function setHistory(h){localStorage.setItem("wisdomHistory",JSON.stringify(h))}function renderHistory(){if(!historyList)return;let h=getHistory();historyList.innerHTML=h.length?"":'<p class="microcopy">No saved guidance yet.</p>';h.forEach(i=>{let d=document.createElement("div");d.className="history-item";d.innerHTML=`<strong>${i.date}</strong><p>${i.preview}</p>`;historyList.appendChild(d)})}if(generateBtn)generateBtn.onclick=()=>{let t=situationInput.value.trim();if(!t)return alert("Please describe your situation first.");latestGuidance=generate(t);resultBox.textContent=latestGuidance;resultBox.classList.remove("empty");saveBtn.disabled=false};if(clearBtn)clearBtn.onclick=()=>{situationInput.value="";latestGuidance="";resultBox.textContent="Your guidance will appear here.";resultBox.classList.add("empty");saveBtn.disabled=true};if(saveBtn)saveBtn.onclick=()=>{let h=getHistory();h.unshift({date:new Date().toLocaleString(),preview:latestGuidance.slice(0,260)+"..."});setHistory(h.slice(0,25));renderHistory();alert("Saved to history.")};if(clearHistoryBtn)clearHistoryBtn.onclick=()=>{setHistory([]);renderHistory()};renderHistory();
+const situationInput = document.getElementById("situation");
+const generateBtn = document.getElementById("generateBtn");
+const clearBtn = document.getElementById("clearBtn");
+const resultBox = document.getElementById("result");
+const saveBtn = document.getElementById("saveBtn");
+const historyList = document.getElementById("historyList");
+const clearHistoryBtn = document.getElementById("clearHistoryBtn");
+
+let latestGuidance = "";
+
+function fallbackGuidance(text) {
+  return `Situation:
+${text}
+
+Biblical Principle:
+Biblical wisdom begins with humility, prayer, patience, wise counsel, and examining the fruit of a decision.
+
+Related Biblical Story:
+Solomon asked God for wisdom before leading others, showing that sound decisions begin with dependence on God rather than pride.
+
+King James Version Scripture References:
+James 1:5; Proverbs 3:5-6; Proverbs 11:14; Galatians 5:22-23
+
+Plain-Language Guidance:
+Slow down and identify the real issue. Ask what choice reflects wisdom, love, truth, patience, responsibility, and obedience to God.
+
+Next Wise Step:
+Pray, read the listed scriptures, seek trusted counsel, and avoid making the decision from fear, anger, pride, or pressure.
+
+Disclaimer:
+Wisdom provides spiritual and biblical guidance only. It is not legal, medical, mental health, financial, or emergency advice.`;
+}
+
+async function getGuidance(text) {
+  const response = await fetch("/api/guidance", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ situation: text })
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || "Unable to generate guidance.");
+  }
+
+  return data.guidance;
+}
+
+function getHistory() {
+  return JSON.parse(localStorage.getItem("wisdomHistory") || "[]");
+}
+
+function setHistory(history) {
+  localStorage.setItem("wisdomHistory", JSON.stringify(history));
+}
+
+function renderHistory() {
+  if (!historyList) return;
+
+  const history = getHistory();
+  historyList.innerHTML = "";
+
+  if (!history.length) {
+    historyList.innerHTML = '<p class="microcopy">No saved guidance yet.</p>';
+    return;
+  }
+
+  history.forEach((item) => {
+    const div = document.createElement("div");
+    div.className = "history-item";
+    div.innerHTML = `<strong>${item.date}</strong><p>${item.preview}</p>`;
+    historyList.appendChild(div);
+  });
+}
+
+if (generateBtn) {
+  generateBtn.addEventListener("click", async () => {
+    const text = situationInput.value.trim();
+
+    if (!text) {
+      alert("Please describe your situation first.");
+      return;
+    }
+
+    generateBtn.disabled = true;
+    generateBtn.textContent = "Generating...";
+    resultBox.textContent = "Preparing biblical guidance...";
+    resultBox.classList.remove("empty");
+
+    try {
+      latestGuidance = await getGuidance(text);
+    } catch (error) {
+      console.warn(error);
+      latestGuidance = fallbackGuidance(text);
+    }
+
+    resultBox.textContent = latestGuidance;
+    saveBtn.disabled = false;
+    generateBtn.disabled = false;
+    generateBtn.textContent = "Get Guidance";
+  });
+}
+
+if (clearBtn) {
+  clearBtn.addEventListener("click", () => {
+    situationInput.value = "";
+    latestGuidance = "";
+    resultBox.textContent = "Your guidance will appear here.";
+    resultBox.classList.add("empty");
+    saveBtn.disabled = true;
+  });
+}
+
+if (saveBtn) {
+  saveBtn.addEventListener("click", () => {
+    if (!latestGuidance) return;
+
+    const history = getHistory();
+    history.unshift({
+      date: new Date().toLocaleString(),
+      preview: latestGuidance.slice(0, 260) + "..."
+    });
+
+    setHistory(history.slice(0, 25));
+    renderHistory();
+    alert("Saved to history.");
+  });
+}
+
+if (clearHistoryBtn) {
+  clearHistoryBtn.addEventListener("click", () => {
+    setHistory([]);
+    renderHistory();
+  });
+}
+
+renderHistory();
