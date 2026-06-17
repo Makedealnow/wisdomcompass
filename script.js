@@ -1,40 +1,12 @@
-const situationInput = document.getElementById("situation");
-const generateBtn = document.getElementById("generateBtn");
-const clearBtn = document.getElementById("clearBtn");
-const resultBox = document.getElementById("result");
-const saveBtn = document.getElementById("saveBtn");
-const historyList = document.getElementById("historyList");
-const clearHistoryBtn = document.getElementById("clearHistoryBtn");
-
-const guidanceDisclaimer = document.getElementById("guidanceDisclaimer");
-const guidanceTool = document.getElementById("guidanceTool");
-const agreeDisclaimerBtn = document.getElementById("agreeDisclaimerBtn");
-
-let latestGuidance = "";
-
-function showGuidanceTool() {
-if (guidanceDisclaimer) guidanceDisclaimer.style.display = "none";
-if (guidanceTool) guidanceTool.classList.remove("guidance-tool-hidden");
-if (situationInput) situationInput.focus();
-}
-
-if (agreeDisclaimerBtn) {
-agreeDisclaimerBtn.addEventListener("click", () => {
-sessionStorage.setItem("wisdomDisclaimerAccepted", "yes");
-showGuidanceTool();
-});
-}
-
-if (
-guidanceDisclaimer &&
-guidanceTool &&
-sessionStorage.getItem("wisdomDisclaimerAccepted") === "yes"
-) {
-showGuidanceTool();
-}
-
-function fallbackGuidance(text) {
-return `Situation:
+const situationInput=document.getElementById("situation");
+const generateBtn=document.getElementById("generateBtn");
+const clearBtn=document.getElementById("clearBtn");
+const resultBox=document.getElementById("result");
+const saveBtn=document.getElementById("saveBtn");
+const historyList=document.getElementById("historyList");
+const clearHistoryBtn=document.getElementById("clearHistoryBtn");
+let latestGuidance="";
+function fallbackGuidance(text){return `Situation:
 ${text}
 
 Biblical Principle:
@@ -53,123 +25,13 @@ Next Wise Step:
 Pray, read the listed scriptures, seek trusted counsel, and avoid making the decision from fear, anger, pride, or pressure.
 
 Disclaimer:
-Wisdom provides spiritual and biblical guidance only. It is not legal, medical, mental health, financial, or emergency advice.`;
-}
-
-async function getGuidance(text) {
-const response = await fetch("/api/guidance", {
-method: "POST",
-headers: { "Content-Type": "application/json" },
-body: JSON.stringify({ situation: text })
-});
-
-const data = await response.json();
-
-if (!response.ok) {
-throw new Error(data.error || "Unable to generate guidance.");
-}
-
-return data.guidance;
-}
-
-function getHistory() {
-return JSON.parse(localStorage.getItem("wisdomHistory") || "[]");
-}
-
-function setHistory(history) {
-localStorage.setItem("wisdomHistory", JSON.stringify(history));
-}
-
-function renderHistory() {
-if (!historyList) return;
-
-const history = getHistory();
-historyList.innerHTML = "";
-
-if (!history.length) {
-historyList.innerHTML = '<p class="microcopy">No saved guidance yet.</p>';
-return;
-}
-
-history.forEach((item) => {
-const div = document.createElement("div");
-div.className = "history-item";
-div.innerHTML = `<strong>${item.date}</strong><p>${item.preview}</p>`;
-historyList.appendChild(div);
-});
-}
-
-if (generateBtn) {
-generateBtn.addEventListener("click", async () => {
-const text = situationInput.value.trim();
-
-```
-if (!text) {
-  alert("Please describe your situation first.");
-  return;
-}
-
-generateBtn.disabled = true;
-generateBtn.textContent = "Generating...";
-resultBox.textContent = "Preparing biblical guidance...";
-resultBox.classList.remove("empty");
-
-try {
-  latestGuidance = await getGuidance(text);
-} catch (error) {
-  console.warn(error);
-  latestGuidance = fallbackGuidance(text);
-}
-
-resultBox.textContent = latestGuidance;
-
-if (window.innerWidth < 861) {
-  resultBox.scrollIntoView({ behavior: "smooth", block: "start" });
-}
-
-saveBtn.disabled = false;
-generateBtn.disabled = false;
-generateBtn.textContent = "Get Guidance";
-```
-
-});
-}
-
-if (clearBtn) {
-clearBtn.addEventListener("click", () => {
-situationInput.value = "";
-latestGuidance = "";
-resultBox.textContent = "Your guidance will appear here.";
-resultBox.classList.add("empty");
-saveBtn.disabled = true;
-});
-}
-
-if (saveBtn) {
-saveBtn.addEventListener("click", () => {
-if (!latestGuidance) return;
-
-```
-const history = getHistory();
-history.unshift({
-  date: new Date().toLocaleString(),
-  preview: latestGuidance.slice(0, 260) + "..."
-});
-
-setHistory(history.slice(0, 25));
+Wisdom provides spiritual and biblical guidance only. It is not legal, medical, mental health, financial, or emergency advice.`}
+async function getGuidance(text){const response=await fetch("/api/guidance",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({situation:text})});const data=await response.json();if(!response.ok){throw new Error(data.error||"Unable to generate guidance.")}return data.guidance}
+function getHistory(){return JSON.parse(localStorage.getItem("wisdomHistory")||"[]")}
+function setHistory(history){localStorage.setItem("wisdomHistory",JSON.stringify(history))}
+function renderHistory(){if(!historyList)return;const history=getHistory();historyList.innerHTML="";if(!history.length){historyList.innerHTML='<p class="microcopy">No saved guidance yet.</p>';return}history.forEach((item)=>{const div=document.createElement("div");div.className="history-item";div.innerHTML=`<strong>${item.date}</strong><p>${item.preview}</p>`;historyList.appendChild(div)})}
+if(generateBtn){generateBtn.addEventListener("click",async()=>{const text=situationInput.value.trim();if(!text){alert("Please describe your situation first.");return}generateBtn.disabled=true;generateBtn.textContent="Generating...";resultBox.textContent="Preparing biblical guidance...";resultBox.classList.remove("empty");try{latestGuidance=await getGuidance(text)}catch(error){console.warn(error);latestGuidance=fallbackGuidance(text)}resultBox.textContent=latestGuidance;saveBtn.disabled=false;generateBtn.disabled=false;generateBtn.textContent="Get Guidance"})}
+if(clearBtn){clearBtn.addEventListener("click",()=>{situationInput.value="";latestGuidance="";resultBox.textContent="Your guidance will appear here.";resultBox.classList.add("empty");saveBtn.disabled=true})}
+if(saveBtn){saveBtn.addEventListener("click",()=>{if(!latestGuidance)return;const history=getHistory();history.unshift({date:new Date().toLocaleString(),preview:latestGuidance.slice(0,260)+"..."});setHistory(history.slice(0,25));renderHistory();alert("Saved to history.")})}
+if(clearHistoryBtn){clearHistoryBtn.addEventListener("click",()=>{setHistory([]);renderHistory()})}
 renderHistory();
-alert("Saved to history.");
-```
-
-});
-}
-
-if (clearHistoryBtn) {
-clearHistoryBtn.addEventListener("click", () => {
-setHistory([]);
-renderHistory();
-});
-}
-
-renderHistory();
-

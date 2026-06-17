@@ -4,9 +4,5 @@
   "private": true,
   "dependencies": {
     "openai": "^6.10.0"
-  },
-  "scripts": {
-    "start": "vercel dev",
-    "deploy": "vercel --prod"
   }
 }
