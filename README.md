@@ -1,1 +1,0 @@
-Fixed logo version. Upload these files to the GitHub repository root and commit changes.
