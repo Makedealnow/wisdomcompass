@@ -1,6 +1,6 @@
-This ZIP has files directly at the ZIP root.
+THIS IS THE FINAL ROOT-ONLY ZIP.
 
-Open the ZIP or extract it. You should immediately see:
+When you open this ZIP, you should immediately see:
 index.html
 script.js
 styles.css
@@ -8,7 +8,8 @@ package.json
 api
 assets
 
-Upload those visible files/folders to GitHub root.
+Upload those items directly to the GitHub repository root.
 
-Do not upload old folders named wisdomcompass-main.
-Do not upload any .zip file to GitHub.
+Do not upload any ZIP file to GitHub.
+Delete old GitHub folders named wisdomcompass-main.
+Delete old GitHub .zip files.
