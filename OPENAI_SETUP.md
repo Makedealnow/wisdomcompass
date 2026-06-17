@@ -1,22 +1,22 @@
-# OpenAI Setup for Wisdom
+# WisdomCompass OpenAI Setup
 
-This update adds a Vercel serverless API at:
+This clean package is ready for GitHub root upload.
 
-/api/guidance
+Required Vercel Environment Variable:
 
-The browser calls this endpoint from script.js. Your OpenAI API key stays private in Vercel.
-
-## Required Vercel Environment Variable
-
-Name:
+Key:
 OPENAI_API_KEY
 
 Value:
-Paste your OpenAI API key
+Your private OpenAI API key
 
-Environment:
+Select:
 Production, Preview, Development
 
-After saving the environment variable, redeploy the Vercel project.
+After saving, redeploy the Vercel project.
 
-Do not paste your OpenAI API key into HTML, CSS, or script.js.
+Important:
+Do not upload ZIP files into GitHub. Extract this ZIP first, then upload the files/folders inside it.
+
+The file api/guidance.js must appear at the repository root as:
+api/guidance.js
