@@ -110,6 +110,167 @@ const PASSAGES = {
   "Psalm 119:105": { title: "Psalm 119:105 — King James Version", text: `105 Thy word is a lamp unto my feet, and a light unto my path.` }
 };
 
+
+
+const COMMENTARY = {
+  "Matthew 19:3-9": {
+    url: "https://biblehub.com/commentaries/matthew/19-3.htm",
+    meaning: "Jesus answers a divorce question by returning to God's creation design for marriage, covenant union, and the seriousness of putting away a spouse.",
+    concepts: ["marriage covenant", "hardness of heart", "faithfulness", "serious counsel before separation"],
+    relation: "For a divorce question, this passage should be read first because Jesus directly addresses marriage and divorce rather than giving a generic wisdom principle."
+  },
+  "Mark 10:2-12": {
+    url: "https://biblehub.com/commentaries/mark/10-2.htm",
+    meaning: "Mark records Jesus pointing beyond legal loopholes to God's original intent for marriage and warning against casual divorce.",
+    concepts: ["God's design", "covenant seriousness", "hardness of heart", "responsibility"],
+    relation: "This helps the user slow down and examine whether the decision is being driven by faithfulness, truth, safety, repentance, or hardened conflict."
+  },
+  "1 Corinthians 7:10-16": {
+    url: "https://biblehub.com/commentaries/1_corinthians/7-10.htm",
+    meaning: "Paul gives pastoral instruction about separation, reconciliation, unbelieving spouses, abandonment, and peace.",
+    concepts: ["reconciliation", "separation", "abandonment", "peace", "pastoral counsel"],
+    relation: "This is especially relevant when the situation involves separation, an unbelieving spouse, abandonment, or whether peace remains possible."
+  },
+  "Malachi 2:14-16": {
+    url: "https://biblehub.com/commentaries/malachi/2-14.htm",
+    meaning: "Malachi rebukes treachery against the wife of one's covenant and warns against dealing faithlessly.",
+    concepts: ["covenant", "faithfulness", "treachery", "spiritual accountability"],
+    relation: "This passage helps frame divorce not merely as a preference decision, but as a covenant and faithfulness issue before God."
+  },
+  "Ephesians 5:21-33": {
+    url: "https://biblehub.com/commentaries/ephesians/5-21.htm",
+    meaning: "Paul describes marriage through mutual submission, sacrificial love, and the picture of Christ and the church.",
+    concepts: ["sacrificial love", "humility", "mutual responsibility", "Christlike service"],
+    relation: "This passage helps a person evaluate the health, duties, failures, and spiritual direction of a marriage relationship."
+  },
+  "Proverbs 15:1": {
+    url: "https://biblehub.com/commentaries/proverbs/15-1.htm",
+    meaning: "A gentle answer can de-escalate anger, while harsh speech intensifies conflict.",
+    concepts: ["speech", "conflict", "anger", "peace-making"],
+    relation: "This passage is useful when the decision is being shaped by arguments, resentment, or heated conflict."
+  },
+  "Proverbs 11:14": {
+    url: "https://biblehub.com/commentaries/proverbs/11-14.htm",
+    meaning: "Wise counsel protects people from falling into avoidable harm.",
+    concepts: ["counsel", "safety", "humility", "decision-making"],
+    relation: "This points the user away from deciding alone and toward trusted, qualified counsel."
+  },
+  "James 1:5": {
+    url: "https://biblehub.com/commentaries/james/1-5.htm",
+    meaning: "God invites those who lack wisdom to ask Him in faith.",
+    concepts: ["prayer", "wisdom", "dependence on God", "humility"],
+    relation: "This passage frames the whole decision process as seeking God's wisdom rather than reacting from pressure."
+  },
+  "Proverbs 3:5-6": {
+    url: "https://biblehub.com/commentaries/proverbs/3-5.htm",
+    meaning: "Trusting the Lord means refusing to rely only on one's limited understanding.",
+    concepts: ["trust", "guidance", "surrender", "direction"],
+    relation: "This helps the user examine whether the decision is being made in prayerful trust or self-reliance."
+  },
+  "Colossians 3:23": {
+    url: "https://biblehub.com/commentaries/colossians/3-23.htm",
+    meaning: "Work should be done sincerely as service to the Lord, not merely for human approval.",
+    concepts: ["work", "integrity", "calling", "service"],
+    relation: "This helps career decisions focus on integrity and faithfulness, not only salary or status."
+  },
+  "Genesis 41:33-40": {
+    url: "https://biblehub.com/commentaries/genesis/41-33.htm",
+    meaning: "Joseph recommends wise planning and stewardship before a coming crisis.",
+    concepts: ["planning", "stewardship", "leadership", "preparation"],
+    relation: "This passage helps financial, business, retirement, and planning decisions focus on foresight and responsibility."
+  },
+  "Daniel 1:8-20": {
+    url: "https://biblehub.com/commentaries/daniel/1-8.htm",
+    meaning: "Daniel resolves to remain faithful while serving in a foreign and pressured environment.",
+    concepts: ["conviction", "integrity", "workplace pressure", "faithfulness"],
+    relation: "This helps a job or career decision examine whether the opportunity compromises convictions."
+  },
+  "Luke 14:28-30": {
+    url: "https://biblehub.com/commentaries/luke/14-28.htm",
+    meaning: "Jesus uses the image of building a tower to teach counting the cost before beginning.",
+    concepts: ["counting the cost", "planning", "prudence", "finishing well"],
+    relation: "This is directly relevant to mortgages, business starts, debt, purchases, and major commitments."
+  },
+  "Proverbs 22:7": {
+    url: "https://biblehub.com/commentaries/proverbs/22-7.htm",
+    meaning: "Debt creates obligations and can limit freedom.",
+    concepts: ["debt", "financial caution", "stewardship", "risk"],
+    relation: "This helps the user weigh whether a purchase or loan will create unhealthy financial bondage."
+  },
+  "Proverbs 21:5": {
+    url: "https://biblehub.com/commentaries/proverbs/21-5.htm",
+    meaning: "Diligent planning tends toward provision, while haste tends toward lack.",
+    concepts: ["planning", "patience", "diligence", "avoiding haste"],
+    relation: "This warns against rushed decisions driven by emotion, sales pressure, or fear of missing out."
+  },
+  "1 Timothy 6:6-10": {
+    url: "https://biblehub.com/commentaries/1_timothy/6-6.htm",
+    meaning: "Paul warns that greed and discontent can lead people into spiritual danger.",
+    concepts: ["contentment", "greed", "money", "temptation"],
+    relation: "This helps financial decisions examine motives, not just numbers."
+  },
+  "Psalm 90:12": {
+    url: "https://biblehub.com/commentaries/psalms/90-12.htm",
+    meaning: "Moses asks God to teach us to number our days so we gain wisdom.",
+    concepts: ["time", "mortality", "wisdom", "purpose"],
+    relation: "This is useful for retirement and life-stage decisions because it frames time as stewardship before God."
+  },
+  "Genesis 50:15-21": {
+    url: "https://biblehub.com/commentaries/genesis/50-15.htm",
+    meaning: "Joseph forgives his brothers while acknowledging that real evil occurred and that God worked through it.",
+    concepts: ["forgiveness", "providence", "truth", "mercy"],
+    relation: "This helps relationship decisions distinguish forgiveness from denial and revenge from wisdom."
+  },
+  "Matthew 18:15-17": {
+    url: "https://biblehub.com/commentaries/matthew/18-15.htm",
+    meaning: "Jesus gives a process for addressing sin directly and with witnesses when needed.",
+    concepts: ["confrontation", "reconciliation", "accountability", "church counsel"],
+    relation: "This helps conflict decisions move from private frustration to a wise, accountable process."
+  },
+  "Romans 12:18": {
+    url: "https://biblehub.com/commentaries/romans/12-18.htm",
+    meaning: "Paul calls believers to pursue peace as far as it depends on them.",
+    concepts: ["peace", "responsibility", "limits", "relationships"],
+    relation: "This helps the user seek peace without pretending they control another person's choices."
+  },
+  "Galatians 5:22-23": {
+    url: "https://biblehub.com/commentaries/galatians/5-22.htm",
+    meaning: "The fruit of the Spirit shows the character that should mark a wise and godly path.",
+    concepts: ["fruit", "character", "Spirit-led decisions", "self-control"],
+    relation: "This helps test the likely fruit of a decision and the spirit in which it is being made."
+  },
+  "Psalm 119:105": {
+    url: "https://biblehub.com/commentaries/psalms/119-105.htm",
+    meaning: "God's word gives light for the next step, not always every future detail.",
+    concepts: ["Scripture", "guidance", "obedience", "next step"],
+    relation: "This helps the user focus on the next faithful step rather than demanding full certainty first."
+  }
+};
+
+function commentaryForRef(ref) {
+  return COMMENTARY[ref] || {
+    url: "https://biblehub.com/commentaries/",
+    meaning: "Use the linked commentary and cross references to study the passage in context.",
+    concepts: ["context", "biblical meaning", "cross references", "wise application"],
+    relation: "Compare this passage with the user's situation carefully before applying it."
+  };
+}
+
+function renderPassageBlock(ref) {
+  const passage = PASSAGES[ref];
+  if (!passage) return "";
+  const c = commentaryForRef(ref);
+  return `<h4>${escapeHTML(passage.title)}</h4>
+    <pre>${escapeHTML(passage.text)}</pre>
+    <div class="commentary-panel">
+      <h5>Meaning, Concepts, and Application</h5>
+      <p><strong>Meaning:</strong> ${escapeHTML(c.meaning)}</p>
+      <p><strong>Key concepts:</strong> ${escapeHTML(c.concepts.join(", "))}</p>
+      <p><strong>How this relates:</strong> ${escapeHTML(c.relation)}</p>
+      <a class="commentary-link" href="${escapeHTML(c.url)}" target="_blank" rel="noopener noreferrer">Open Bible commentary and cross references</a>
+    </div>`;
+}
+
 const TOPIC_GUIDES = [
   {
     name: "Marriage, Divorce, Separation, Covenant",
@@ -247,8 +408,7 @@ function guidanceToHTML(guidance, userText) {
         <p class="microcopy">Click another reference below to display its full passage here without leaving the page.</p>
       </div>
       <div class="passage-display" id="passageDisplay">
-        <h4>${escapeHTML(passage.title)}</h4>
-        <pre>${escapeHTML(passage.text)}</pre>
+        ${renderPassageBlock(firstRef)}
       </div>
       <div class="passage-links" id="passageLinks">${buttons}</div>
     </div>` : "";
@@ -265,7 +425,8 @@ function attachPassageHandlers() {
       if (!passage) return;
       document.querySelectorAll(".passage-link").forEach(b => b.classList.remove("selected"));
       btn.classList.add("selected");
-      display.innerHTML = `<h4>${escapeHTML(passage.title)}</h4><pre>${escapeHTML(passage.text)}</pre>`;
+      display.innerHTML = renderPassageBlock(ref);
+      display.scrollTop = 0;
     });
   });
 }
@@ -298,6 +459,7 @@ if (generateBtn) {
     catch (error) { console.warn(error); latestGuidance = fallbackGuidance(text); }
     latestRenderedText = latestGuidance;
     resultBox.innerHTML = guidanceToHTML(latestGuidance, text);
+    resultBox.scrollTop = 0;
     attachPassageHandlers();
     saveBtn.disabled = false;
     generateBtn.disabled = false;
