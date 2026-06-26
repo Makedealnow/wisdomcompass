@@ -260,14 +260,22 @@ function renderPassageBlock(ref) {
   const passage = PASSAGES[ref];
   if (!passage) return "";
   const c = commentaryForRef(ref);
+  const conceptList = c.concepts.map(item => `<li>${escapeHTML(item)}</li>`).join("");
   return `<h4>${escapeHTML(passage.title)}</h4>
     <pre>${escapeHTML(passage.text)}</pre>
-    <div class="commentary-panel">
-      <h5>Meaning, Concepts, and Application</h5>
-      <p><strong>Meaning:</strong> ${escapeHTML(c.meaning)}</p>
-      <p><strong>Key concepts:</strong> ${escapeHTML(c.concepts.join(", "))}</p>
-      <p><strong>How this relates:</strong> ${escapeHTML(c.relation)}</p>
-      <a class="commentary-link" href="${escapeHTML(c.url)}" target="_blank" rel="noopener noreferrer">Open Bible commentary and cross references</a>
+    <div class="commentary-panel simple-study-notes">
+      <section class="study-note-block">
+        <h5>Key Biblical Concepts</h5>
+        <ul>${conceptList}</ul>
+      </section>
+      <section class="study-note-block">
+        <h5>Meaning of the Passage</h5>
+        <p>${escapeHTML(c.meaning)}</p>
+      </section>
+      <section class="study-note-block">
+        <h5>How This Relates to Your Situation</h5>
+        <p>${escapeHTML(c.relation)}</p>
+      </section>
     </div>`;
 }
 
@@ -404,8 +412,8 @@ function guidanceToHTML(guidance, userText) {
   const passageHTML = passage ? `
     <div class="passage-reader" id="passageReader">
       <div class="passage-header">
-        <h3>Full Bible Passage to Read First</h3>
-        <p class="microcopy">Click another reference below to display its full passage here without leaving the page.</p>
+        <h3>Full KJV Passage to Read First</h3>
+        <p class="microcopy">Click another reference below to display the full KJV passage and simple study notes here without leaving the page.</p>
       </div>
       <div class="passage-display" id="passageDisplay">
         ${renderPassageBlock(firstRef)}
@@ -463,7 +471,7 @@ if (generateBtn) {
     attachPassageHandlers();
     saveBtn.disabled = false;
     generateBtn.disabled = false;
-    generateBtn.textContent = "Get Guidance";
+    generateBtn.textContent = "Get Free Biblical Guidance";
   });
 }
 

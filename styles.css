@@ -13,3 +13,15 @@
 /* Commentary upgrade: each displayed passage includes meaning, key concepts, relation to the user's situation, and a commentary link. */
 .commentary-panel{margin-top:14px;background:#f8f5ee;border:1px solid #e5ded1;border-radius:14px;padding:14px;white-space:normal}
 .commentary-panel h5{font-family:Georgia,serif;color:#1e3a5f;font-size:18px;margin:0 0 8px}.commentary-panel p{margin:8px 0;line-height:1.55}.commentary-link{display:inline-flex;margin-top:8px;background:#1e3a5f;color:#fff!important;border-radius:999px;padding:9px 12px;font-weight:900;font-size:13px}.passage-display{max-height:46vh;overflow-y:auto}.passage-reader{margin-top:0}.result-box.active-result{padding-top:14px}
+
+
+/* Simple passage study notes: Key Concepts, Meaning, Relation */
+.simple-study-notes{display:grid;gap:12px;background:#fffdf8;border:1px solid #eadbb9;border-radius:14px;padding:14px;margin-top:14px}
+.study-note-block{background:#fff;border:1px solid #efe5cf;border-radius:12px;padding:12px}
+.study-note-block h5{font-family:Georgia,serif;color:#1e3a5f;font-size:17px;margin:0 0 8px}
+.study-note-block p{margin:0;line-height:1.55}
+.study-note-block ul{margin:0;padding-left:20px;display:grid;gap:5px}
+.commentary-link{display:none!important}
+.result-panel{position:sticky;top:8px;max-height:calc(100vh - 18px)}
+.result-panel .result-box{max-height:calc(100vh - 185px);overflow-y:auto}
+@media(max-width:860px){.result-panel{position:static;max-height:none}.result-panel .result-box{max-height:70vh}}
