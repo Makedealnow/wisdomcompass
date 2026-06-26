@@ -1,4 +1,3 @@
 User-agent: *
 Allow: /
-
-Sitemap: https://makedealnow.com/sitemap.xml
+Sitemap: https://wisdomcompass.net/sitemap.xml
