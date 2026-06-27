@@ -25,3 +25,11 @@
 .result-panel{position:sticky;top:8px;max-height:calc(100vh - 18px)}
 .result-panel .result-box{max-height:calc(100vh - 185px);overflow-y:auto}
 @media(max-width:860px){.result-panel{position:static;max-height:none}.result-panel .result-box{max-height:70vh}}
+
+/* Whole-Bible situation synthesis */
+.bible-says-card{background:#f5fbff;border:1px solid #cfe3f5;border-radius:18px;padding:16px;margin-bottom:14px;box-shadow:0 10px 30px rgba(30,58,95,.08)}
+.bible-says-card h3{font-size:22px;margin:0 0 8px;color:#142a45}
+.bible-says-card h4{font-family:Inter,Arial,sans-serif;font-size:15px;text-transform:uppercase;letter-spacing:.08em;color:#1e3a5f;margin:14px 0 8px}
+.bible-says-card p{margin:0;line-height:1.55}
+.passage-relation-list{margin:0;padding-left:20px;display:grid;gap:8px}
+.passage-relation-list li{line-height:1.45}

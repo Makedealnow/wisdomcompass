@@ -256,7 +256,26 @@ function commentaryForRef(ref) {
   };
 }
 
-function renderPassageBlock(ref) {
+function passageApplication(ref, guide, userText) {
+  const topicName = (guide && guide.name) || "";
+  if (topicName.includes("Marriage")) {
+    const marriageApplications = {
+      "Matthew 19:3-9": "Your situation is directly related because Jesus is answering a divorce question. This passage establishes God's design for marriage as a covenant and warns against treating divorce casually. It also mentions an exception involving fornication, so it should be read together with the additional passages below before reaching a conclusion.",
+      "Mark 10:2-12": "This passage is similar because it also records people asking Jesus about divorce. It emphasizes the seriousness of breaking the marriage covenant and shows the strong biblical warning against casual separation. It should be balanced with Matthew 19:9 and 1 Corinthians 7 for the broader biblical teaching.",
+      "1 Corinthians 7:10-16": "This passage relates because Paul addresses separation, reconciliation, mixed marriages, abandonment by an unbelieving spouse, and peace. It helps the user see that the Bible discusses more than one circumstance, so the decision should consider covenant, repentance, safety, abandonment, and wise counsel.",
+      "Malachi 2:14-16": "This passage relates because it describes marriage as a covenant witnessed by God and condemns treacherous dealing. It helps the user examine whether the problem involves betrayal, hardness of heart, unfaithfulness, or covenant-breaking conduct.",
+      "Ephesians 5:21-33": "This passage relates because it shows God's pattern for marriage: mutual submission, sacrificial love, care, and faithfulness. It helps the user compare the current relationship with the biblical picture of love and responsibility.",
+      "Proverbs 15:1": "This relates to the conflict side of the situation. It does not answer the divorce question by itself, but it helps examine whether anger, harsh speech, and escalating conflict are driving the decision.",
+      "Proverbs 11:14": "This relates because divorce is too serious to decide in isolation. Scripture commends wise counsel, which may include trusted pastoral counsel and qualified professional help.",
+      "James 1:5": "This relates because a painful marriage decision requires wisdom from God, not only emotion, fear, anger, or pressure. It points the user toward prayerful dependence before acting."
+    };
+    return marriageApplications[ref] || commentaryForRef(ref).relation;
+  }
+  const c = commentaryForRef(ref);
+  return `${c.relation} Compare the circumstances of this passage with your own situation before applying it.`;
+}
+
+function renderPassageBlock(ref, guide, userText) {
   const passage = PASSAGES[ref];
   if (!passage) return "";
   const c = commentaryForRef(ref);
@@ -273,8 +292,8 @@ function renderPassageBlock(ref) {
         <p>${escapeHTML(c.meaning)}</p>
       </section>
       <section class="study-note-block">
-        <h5>How This Relates to Your Situation</h5>
-        <p>${escapeHTML(c.relation)}</p>
+        <h5>How This Passage Applies to Your Situation</h5>
+        <p>${escapeHTML(passageApplication(ref, guide, userText))}</p>
       </section>
     </div>`;
 }
@@ -404,28 +423,67 @@ function referencesForText(guidance, userText) {
   return found.slice(0, 10);
 }
 
+function oneSentencePassageRelation(ref, guide, userText) {
+  if (guide && guide.name.includes("Marriage")) {
+    const map = {
+      "Matthew 19:3-9": "similar circumstance: a direct divorce question; meaning: God designed marriage as covenant, and Jesus names sexual immorality as an exception.",
+      "Mark 10:2-12": "similar circumstance: a direct divorce question; meaning: divorce is not to be treated casually because marriage joins two into one flesh.",
+      "1 Corinthians 7:10-16": "similar circumstance: separation and an unbelieving spouse; meaning: pursue reconciliation where possible, but abandonment and peace are also addressed.",
+      "Malachi 2:14-16": "similar circumstance: covenant betrayal; meaning: God sees treachery in marriage and calls people to faithfulness.",
+      "Ephesians 5:21-33": "similar circumstance: what marriage should look like; meaning: marriage should reflect sacrificial love, care, and covenant responsibility.",
+      "Proverbs 15:1": "similar circumstance: conflict and anger; meaning: words can calm or inflame a troubled relationship.",
+      "Proverbs 11:14": "similar circumstance: a serious decision; meaning: wise counsel helps prevent isolated and dangerous choices.",
+      "James 1:5": "similar circumstance: lacking wisdom; meaning: ask God for wisdom before acting."
+    };
+    return map[ref] || commentaryForRef(ref).relation;
+  }
+  const c = commentaryForRef(ref);
+  return `meaning: ${c.meaning} relation: ${c.relation}`;
+}
+
+function whatTheBibleSaysHTML(guide, refs, userText) {
+  if (!guide) return "";
+  let summary = "";
+  if (guide.name.includes("Marriage")) {
+    summary = "Taken together, these passages show that Scripture treats marriage as a serious covenant before God, not a casual arrangement. Jesus points back to God's design for lifelong faithfulness and warns against easy divorce, while Matthew 19 also names sexual immorality as an exception. Paul addresses separation, reconciliation, abandonment by an unbelieving spouse, and peace. The wider passages also call for covenant faithfulness, sacrificial love, gentle speech, wise counsel, prayer, and safety where there is danger. Read the passages together before reaching a conclusion.";
+  } else {
+    summary = `Taken together, these passages emphasize ${guide.themes.join(", ")}. They help compare your situation with biblical patterns instead of relying on one isolated verse. Read the passages together, pray for wisdom, and seek trusted counsel before acting.`;
+  }
+  const bullets = refs.map(ref => `<li><strong>${escapeHTML(ref)}:</strong> ${escapeHTML(oneSentencePassageRelation(ref, guide, userText))}</li>`).join("");
+  return `<section class="bible-says-card">
+    <h3>What the Bible Says About Your Situation</h3>
+    <p>${escapeHTML(summary)}</p>
+    <h4>How the passages connect to your situation</h4>
+    <ul class="passage-relation-list">${bullets}</ul>
+  </section>`;
+}
+
 function guidanceToHTML(guidance, userText) {
+  const guide = selectGuide(userText || guidance || "");
   const refs = referencesForText(guidance, userText);
   const firstRef = refs[0];
   const passage = firstRef ? PASSAGES[firstRef] : null;
   const buttons = refs.map((ref, idx) => `<button type="button" class="passage-link ${idx === 0 ? "selected" : ""}" data-ref="${escapeHTML(ref)}">${escapeHTML(ref)}</button>`).join("");
+  const bibleSays = whatTheBibleSaysHTML(guide, refs, userText);
   const passageHTML = passage ? `
+    ${bibleSays}
     <div class="passage-reader" id="passageReader">
       <div class="passage-header">
-        <h3>Full KJV Passage to Read First</h3>
-        <p class="microcopy">Click another reference below to display the full KJV passage and simple study notes here without leaving the page.</p>
+        <h3>Primary Bible Passage to Read First</h3>
+        <p class="microcopy">Click another reference below to display its full KJV passage and study notes here without leaving the page.</p>
       </div>
       <div class="passage-display" id="passageDisplay">
-        ${renderPassageBlock(firstRef)}
+        ${renderPassageBlock(firstRef, guide, userText)}
       </div>
       <div class="passage-links" id="passageLinks">${buttons}</div>
     </div>` : "";
   return `${passageHTML}<div class="guidance-text"><h3>Biblical Guidance</h3><pre>${escapeHTML(guidance)}</pre></div>`;
 }
 
-function attachPassageHandlers() {
+function attachPassageHandlers(userText) {
   const display = document.getElementById("passageDisplay");
   if (!display) return;
+  const guide = selectGuide(userText || "");
   document.querySelectorAll(".passage-link").forEach(btn => {
     btn.addEventListener("click", () => {
       const ref = btn.getAttribute("data-ref");
@@ -433,7 +491,7 @@ function attachPassageHandlers() {
       if (!passage) return;
       document.querySelectorAll(".passage-link").forEach(b => b.classList.remove("selected"));
       btn.classList.add("selected");
-      display.innerHTML = renderPassageBlock(ref);
+      display.innerHTML = renderPassageBlock(ref, guide, userText);
       display.scrollTop = 0;
     });
   });
@@ -468,7 +526,7 @@ if (generateBtn) {
     latestRenderedText = latestGuidance;
     resultBox.innerHTML = guidanceToHTML(latestGuidance, text);
     resultBox.scrollTop = 0;
-    attachPassageHandlers();
+    attachPassageHandlers(text);
     saveBtn.disabled = false;
     generateBtn.disabled = false;
     generateBtn.textContent = "Get Free Biblical Guidance";
