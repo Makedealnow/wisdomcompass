@@ -1,0 +1,16 @@
+{
+  "name": "makedealnow-lowest-price",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vercel dev",
+    "start": "vercel dev"
+  },
+  "dependencies": {
+    "openai": "^4.77.0"
+  },
+  "devDependencies": {
+    "vercel": "^39.2.0"
+  }
+}
