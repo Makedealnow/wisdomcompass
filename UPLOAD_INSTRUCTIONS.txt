@@ -1,0 +1,16 @@
+UPLOAD THIS FOLDER CONTENTS TO GITHUB
+
+Important:
+- Open the wisdomcompass-main folder.
+- Upload/commit the files INSIDE that folder to the main/root of the GitHub repository.
+- Do NOT upload a second nested wisdomcompass-main folder.
+- The live homepage file must be /index.html at the repository root.
+
+After commit:
+- Wait 1-3 minutes.
+- Open https://wisdomcompass.net/?v=2
+- Press Ctrl+F5.
+
+The updated homepage should start with:
+Decisions Matter.
+Better Decisions. Stronger Families. Wiser Lives.

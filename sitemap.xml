@@ -1,10 +1,22 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://wisdomcompass.net/</loc></url>
-  <url><loc>https://wisdomcompass.net/guidance</loc></url>
   <url><loc>https://wisdomcompass.net/about</loc></url>
-  <url><loc>https://wisdomcompass.net/pricing</loc></url>
+  <url><loc>https://wisdomcompass.net/guidance</loc></url>
+  <url><loc>https://wisdomcompass.net/business-partners</loc></url>
+  <url><loc>https://wisdomcompass.net/contact</loc></url>
   <url><loc>https://wisdomcompass.net/privacy</loc></url>
   <url><loc>https://wisdomcompass.net/terms</loc></url>
   <url><loc>https://wisdomcompass.net/disclaimer</loc></url>
+  <url><loc>https://wisdomcompass.net/career</loc></url>
+  <url><loc>https://wisdomcompass.net/business</loc></url>
+  <url><loc>https://wisdomcompass.net/financial</loc></url>
+  <url><loc>https://wisdomcompass.net/family</loc></url>
+  <url><loc>https://wisdomcompass.net/life</loc></url>
+  <url><loc>https://wisdomcompass.net/vehicles</loc></url>
+  <url><loc>https://wisdomcompass.net/insurance</loc></url>
+  <url><loc>https://wisdomcompass.net/mortgages</loc></url>
+  <url><loc>https://wisdomcompass.net/home-services</loc></url>
+  <url><loc>https://wisdomcompass.net/real-estate</loc></url>
+  <url><loc>https://wisdomcompass.net/lowest-price</loc></url>
 </urlset>
