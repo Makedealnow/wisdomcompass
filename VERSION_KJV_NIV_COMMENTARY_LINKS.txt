@@ -1,0 +1,1 @@
+Final fix: KJV passages display on WisdomCompass. Immediately below each displayed KJV passage are visible buttons for Read in NIV, BibleHub Commentary, and BibleHub Cross References. ZIP is under 100 files.
