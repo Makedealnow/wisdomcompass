@@ -1,0 +1,1 @@
+Fixed guidance tool: restored the original Scripture/passage matching engine, KJV passage reader, clickable passage references, BibleHub commentary links, saved history, and working disclaimer button. Preserved Decision Matters branding on the rest of the site while keeping the guidance tool Bible-focused as intended. Upload contents of this folder to repo root.
