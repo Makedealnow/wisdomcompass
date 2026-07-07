@@ -1,0 +1,19 @@
+FIXED VERSION - BUTTON AND LINKS REPAIRED
+
+What was fixed:
+1. The I Agree — Continue button was broken because script.js had a JavaScript syntax error.
+2. /business-partners showed Page Not Found because the clean URL folder was missing.
+3. The duplicate nested wisdomcompass-main folder was removed.
+4. All .html pages now also have matching /page-name/index.html folders for clean URLs.
+
+How to upload to GitHub:
+1. Open this ZIP.
+2. Open the WisdomCompass_v2_BUTTON_LINKS_FIXED folder.
+3. Select ALL files and folders inside it.
+4. Upload those files/folders into the ROOT of your GitHub repository.
+5. Do not upload the outside folder itself.
+6. Commit changes.
+7. Wait 2-5 minutes.
+8. Test: https://wisdomcompass.net/guidance and https://wisdomcompass.net/business-partners
+
+If browser still shows the old page, press Ctrl + F5.
