@@ -320,15 +320,12 @@ function studyLinksHTML(ref) {
   const niv = bibleGatewayUrl(ref, "NIV");
   const commentary = bibleHubUrl(ref, "commentaries");
   const crossrefs = bibleHubUrl(ref, "crossrefs");
-  return `<section class="external-study-box" aria-label="Compare and study this passage">
-      <h5>Compare and Study This Passage</h5>
-      <div class="external-study-links">
-        <a class="study-resource-link" href="${escapeHTML(niv)}" target="_blank" rel="noopener noreferrer">📖 Read in NIV</a>
-        <a class="study-resource-link" href="${escapeHTML(commentary)}" target="_blank" rel="noopener noreferrer">📚 BibleHub Commentary</a>
-        <a class="study-resource-link" href="${escapeHTML(crossrefs)}" target="_blank" rel="noopener noreferrer">🔍 BibleHub Cross References</a>
-      </div>
-      <p class="microcopy copyright-note">KJV is displayed here. NIV and commentary open as external study links to reduce copyright risk.</p>
-    </section>`;
+  return `<div class="external-study-links">
+      <a class="study-resource-link" href="${escapeHTML(niv)}" target="_blank" rel="noopener noreferrer">📖 READ THIS PASSAGE IN NIV</a>
+      <a class="study-resource-link" href="${escapeHTML(commentary)}" target="_blank" rel="noopener noreferrer">📚 BIBLEHUB COMMENTARY</a>
+      <a class="study-resource-link" href="${escapeHTML(crossrefs)}" target="_blank" rel="noopener noreferrer">🔍 BIBLEHUB CROSS REFERENCES</a>
+    </div>
+    <p class="microcopy copyright-note">WisdomCompass displays KJV on this site. NIV and commentary resources open on external study sites.</p>`;
 }
 
 function renderPassageBlock(ref, guide, userText) {

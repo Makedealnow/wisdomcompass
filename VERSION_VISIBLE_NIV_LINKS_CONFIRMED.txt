@@ -1,0 +1,1 @@
+CONFIRMED: guidance.html contains inline guidance JavaScript with visible study buttons directly under each KJV passage: READ THIS PASSAGE IN NIV, BIBLEHUB COMMENTARY, BIBLEHUB CROSS REFERENCES.
