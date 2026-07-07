@@ -1,0 +1,1 @@
+Updated guidance tool: KJV remains displayed on WisdomCompass. Each displayed passage now dynamically creates external links for Read in NIV (BibleGateway), BibleHub Commentary, and BibleHub Cross References based on the selected scripture reference. No NIV text is republished on-site.

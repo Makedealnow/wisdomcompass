@@ -275,6 +275,59 @@ function passageApplication(ref, guide, userText) {
   return `${c.relation} Compare the circumstances of this passage with your own situation before applying it.`;
 }
 
+
+function bibleGatewayUrl(ref, version) {
+  return `https://www.biblegateway.com/passage/?search=${encodeURIComponent(ref)}&version=${encodeURIComponent(version)}`;
+}
+
+function bibleHubBookSlug(book) {
+  const map = {
+    "1 Corinthians": "1_corinthians",
+    "1 Timothy": "1_timothy",
+    "1 Kings": "1_kings",
+    "Genesis": "genesis",
+    "Matthew": "matthew",
+    "Mark": "mark",
+    "Malachi": "malachi",
+    "Ephesians": "ephesians",
+    "Proverbs": "proverbs",
+    "James": "james",
+    "Colossians": "colossians",
+    "Daniel": "daniel",
+    "Luke": "luke",
+    "Psalm": "psalms",
+    "Romans": "romans",
+    "Galatians": "galatians"
+  };
+  return map[book] || book.toLowerCase().replace(/\s+/g, "_");
+}
+
+function parsePassageStart(ref) {
+  const match = String(ref).match(/^((?:[1-3]\s+)?[A-Za-z]+(?:\s+[A-Za-z]+)*)\s+(\d+):(\d+)/);
+  if (!match) return null;
+  return { book: match[1], chapter: match[2], verse: match[3] };
+}
+
+function bibleHubUrl(ref, type) {
+  const parsed = parsePassageStart(ref);
+  if (!parsed) return type === "crossrefs" ? "https://biblehub.com/crossrefs/" : "https://biblehub.com/commentaries/";
+  const slug = bibleHubBookSlug(parsed.book);
+  const section = type === "crossrefs" ? "crossrefs" : "commentaries";
+  return `https://biblehub.com/${section}/${slug}/${parsed.chapter}-${parsed.verse}.htm`;
+}
+
+function studyLinksHTML(ref) {
+  const niv = bibleGatewayUrl(ref, "NIV");
+  const commentary = bibleHubUrl(ref, "commentaries");
+  const crossrefs = bibleHubUrl(ref, "crossrefs");
+  return `<div class="external-study-links">
+      <a class="study-resource-link" href="${escapeHTML(niv)}" target="_blank" rel="noopener noreferrer">Read in NIV</a>
+      <a class="study-resource-link" href="${escapeHTML(commentary)}" target="_blank" rel="noopener noreferrer">BibleHub Commentary</a>
+      <a class="study-resource-link" href="${escapeHTML(crossrefs)}" target="_blank" rel="noopener noreferrer">BibleHub Cross References</a>
+    </div>
+    <p class="microcopy copyright-note">WisdomCompass displays KJV on this site. NIV and commentary resources open on external study sites.</p>`;
+}
+
 function renderPassageBlock(ref, guide, userText) {
   const passage = PASSAGES[ref];
   if (!passage) return "";
@@ -282,6 +335,7 @@ function renderPassageBlock(ref, guide, userText) {
   const conceptList = c.concepts.map(item => `<li>${escapeHTML(item)}</li>`).join("");
   return `<h4>${escapeHTML(passage.title)}</h4>
     <pre>${escapeHTML(passage.text)}</pre>
+    ${studyLinksHTML(ref)}
     <div class="commentary-panel simple-study-notes">
       <section class="study-note-block">
         <h5>Key Biblical Concepts</h5>
@@ -529,7 +583,7 @@ if (generateBtn) {
     attachPassageHandlers(text);
     saveBtn.disabled = false;
     generateBtn.disabled = false;
-    generateBtn.textContent = "Get Free Biblical Guidance";
+    generateBtn.textContent = "Search Scripture";
   });
 }
 
