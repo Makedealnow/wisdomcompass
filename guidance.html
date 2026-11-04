@@ -14,7 +14,7 @@
 <meta property="og:type" content="website">
 <link rel="canonical" href="https://wisdomcompass.net/guidance">
 </head><body>
-<header class="site-header"><a class="logo" href="/">WisdomCompass</a><nav class="nav"><a href="/guidance">Decision Guidance</a><a href="/about">About</a><a href="/business-partners">Partners</a><a class="nav-cta" href="/guidance">Start Free</a></nav></header>
+<header class="site-header"><a class="logo" href="/">WisdomCompass</a><nav class="nav"><a href="/guidance">Decision Guidance</a><a href="/about">About</a><a href="/business-partners">Partners</a><a class="nav-cta" href="/guidance">Free Guidance</a></nav></header>
 <main><section class="tool-page"><section id="guidanceDisclaimer" class="panel disclaimer-gate"><p class="eyebrow">Before You Continue</p><h1>Informational Guidance Only</h1><p>WisdomCompass provides biblical, spiritual, educational, informational, and entertainment-style guidance only.</p><p>WisdomCompass is not legal, medical, mental health, financial, emergency, dietary, nutrition, or professional advice. You are responsible for your own decisions. For serious or urgent issues, contact a qualified professional or emergency services.</p><button class="button primary" id="agreeDisclaimerBtn">I Agree — Continue</button></section><section id="guidanceTool" class="guidance-tool-hidden"><section class="tool-intro"><p class="eyebrow">Decision Guidance Tool</p><h1>Think clearly before you choose.</h1><p>Describe the decision you are facing. WisdomCompass will help you organize the issue, ask better questions, and identify a wiser next step.</p></section><section class="tool-grid same-screen-grid"><div class="panel form-card"><label for="situation">What decision or situation are you facing?</label><textarea id="situation" placeholder="Example: I am trying to decide whether to change jobs, start a business partnership, make a major purchase, or handle a family conflict."></textarea><div class="button-row"><button class="button primary" id="generateBtn">Search Scripture</button><button class="button secondary" id="clearBtn">Clear</button></div><p class="microcopy">Tip: include the decision, the pressure, who is affected, and what outcome you are considering.</p></div><div class="panel result-panel"><h2>Your Guidance</h2><div id="result" class="result-box empty">Your biblical topic search and guidance will appear here on this same page.</div><button class="button secondary" id="saveBtn" disabled>Save to History</button></div></section><section class="panel history-panel"><div class="history-heading"><h2>Saved History</h2><button class="link-button" id="clearHistoryBtn">Clear History</button></div><div id="historyList"></div></section></section></section><script>
 const situationInput = document.getElementById("situation");
 const generateBtn = document.getElementById("generateBtn");
@@ -31,6 +31,37 @@ let latestGuidance = "";
 let latestRenderedText = "";
 
 const PASSAGES = {
+  "Psalm 37:21": { title: "Psalm 37:21 — King James Version", text: `21 The wicked borroweth, and payeth not again: but the righteous sheweth mercy, and giveth.` },
+  "Luke 6:34-35": { title: "Luke 6:34-35 — King James Version", text: `34 And if ye lend to them of whom ye hope to receive, what thank have ye? for sinners also lend to sinners, to receive as much again.
+35 But love ye your enemies, and do good, and lend, hoping for nothing again; and your reward shall be great, and ye shall be the children of the Highest: for he is kind unto the unthankful and to the evil.` },
+  "Deuteronomy 15:7-8": { title: "Deuteronomy 15:7-8 — King James Version", text: `7 If there be among you a poor man of one of thy brethren within any of thy gates in thy land which the LORD thy God giveth thee, thou shalt not harden thine heart, nor shut thine hand from thy poor brother:
+8 But thou shalt open thine hand wide unto him, and shalt surely lend him sufficient for his need, in that which he wanteth.` },
+  "Proverbs 19:17": { title: "Proverbs 19:17 — King James Version", text: `17 He that hath pity upon the poor lendeth unto the LORD; and that which he hath given will he pay him again.` },
+  "Matthew 5:42": { title: "Matthew 5:42 — King James Version", text: `42 Give to him that asketh thee, and from him that would borrow of thee turn not thou away.` },
+  "Psalm 112:5": { title: "Psalm 112:5 — King James Version", text: `5 A good man sheweth favour, and lendeth: he will guide his affairs with discretion.` },
+  "Philippians 4:6-7": { title: "Philippians 4:6-7 — King James Version", text: `6 Be careful for nothing; but in every thing by prayer and supplication with thanksgiving let your requests be made known unto God.
+7 And the peace of God, which passeth all understanding, shall keep your hearts and minds through Christ Jesus.` },
+  "Isaiah 41:10": { title: "Isaiah 41:10 — King James Version", text: `10 Fear thou not; for I am with thee: be not dismayed; for I am thy God: I will strengthen thee; yea, I will help thee; yea, I will uphold thee with the right hand of my righteousness.` },
+  "Psalm 56:3-4": { title: "Psalm 56:3-4 — King James Version", text: `3 What time I am afraid, I will trust in thee.
+4 In God I will praise his word, in God I have put my trust; I will not fear what flesh can do unto me.` },
+  "2 Timothy 1:7": { title: "2 Timothy 1:7 — King James Version", text: `7 For God hath not given us the spirit of fear; but of power, and of love, and of a sound mind.` },
+  "Joshua 1:9": { title: "Joshua 1:9 — King James Version", text: `9 Have not I commanded thee? Be strong and of a good courage; be not afraid, neither be thou dismayed: for the LORD thy God is with thee whithersoever thou goest.` },
+  "Matthew 6:33-34": { title: "Matthew 6:33-34 — King James Version", text: `33 But seek ye first the kingdom of God, and his righteousness; and all these things shall be added unto you.
+34 Take therefore no thought for the morrow: for the morrow shall take thought for the things of itself. Sufficient unto the day is the evil thereof.` },
+  "Psalm 34:18": { title: "Psalm 34:18 — King James Version", text: `18 The LORD is nigh unto them that are of a broken heart; and saveth such as be of a contrite spirit.` },
+  "John 11:33-35": { title: "John 11:33-35 — King James Version", text: `33 When Jesus therefore saw her weeping, and the Jews also weeping which came with her, he groaned in the spirit, and was troubled,
+34 And said, Where have ye laid him? They said unto him, Lord, come and see.
+35 Jesus wept.` },
+  "2 Corinthians 1:3-4": { title: "2 Corinthians 1:3-4 — King James Version", text: `3 Blessed be God, even the Father of our Lord Jesus Christ, the Father of mercies, and the God of all comfort;
+4 Who comforteth us in all our tribulation, that we may be able to comfort them which are in any trouble, by the comfort wherewith we ourselves are comforted of God.` },
+  "Revelation 21:4": { title: "Revelation 21:4 — King James Version", text: `4 And God shall wipe away all tears from their eyes; and there shall be no more death, neither sorrow, nor crying, neither shall there be any more pain: for the former things are passed away.` },
+  "Matthew 5:4": { title: "Matthew 5:4 — King James Version", text: `4 Blessed are they that mourn: for they shall be comforted.` },
+  "Proverbs 22:6": { title: "Proverbs 22:6 — King James Version", text: `6 Train up a child in the way he should go: and when he is old, he will not depart from it.` },
+  "Deuteronomy 6:6-7": { title: "Deuteronomy 6:6-7 — King James Version", text: `6 And these words, which I command thee this day, shall be in thine heart:
+7 And thou shalt teach them diligently unto thy children, and shalt talk of them when thou sittest in thine house, and when thou walkest by the way, and when thou liest down, and when thou risest up.` },
+  "Ephesians 6:4": { title: "Ephesians 6:4 — King James Version", text: `4 And, ye fathers, provoke not your children to wrath: but bring them up in the nurture and admonition of the Lord.` },
+  "Psalm 127:3": { title: "Psalm 127:3 — King James Version", text: `3 Lo, children are an heritage of the LORD: and the fruit of the womb is his reward.` },
+  "Proverbs 29:17": { title: "Proverbs 29:17 — King James Version", text: `17 Correct thy son, and he shall give thee rest; yea, he shall give delight unto thy soul.` },
   "Matthew 19:3-9": {
     title: "Matthew 19:3-9 — King James Version",
     text: `3 The Pharisees also came unto him, tempting him, and saying unto him, Is it lawful for a man to put away his wife for every cause?
@@ -131,6 +162,138 @@ const PASSAGES = {
 
 
 const COMMENTARY = {
+  "Psalm 37:21": {
+    url: "https://biblehub.com/commentaries/psalms/37-21.htm",
+    meaning: "Character shows in borrowing: the wicked keep what they borrowed; the righteous are free to be generous.",
+    concepts: ["borrowing", "character", "generosity"],
+    relation: "This helps the user weigh the kind of borrower — and lender — they are dealing with."
+  },
+  "Luke 6:34-35": {
+    url: "https://biblehub.com/commentaries/luke/6-34.htm",
+    meaning: "Jesus calls his followers to lend without making repayment the price of love.",
+    concepts: ["lending", "mercy", "enemies", "generosity"],
+    relation: "This reframes a family loan: the health of the relationship matters more than the return."
+  },
+  "Deuteronomy 15:7-8": {
+    url: "https://biblehub.com/commentaries/deuteronomy/15-7.htm",
+    meaning: "God commands an open hand toward a poor brother, and warns against a hard heart that calculates the loss.",
+    concepts: ["generosity", "poor", "open hand"],
+    relation: "This helps the user examine the spirit behind their hesitation, not just the math."
+  },
+  "Proverbs 19:17": {
+    url: "https://biblehub.com/commentaries/proverbs/19-17.htm",
+    meaning: "Kindness to the poor is treated as a loan to the Lord himself, who repays.",
+    concepts: ["generosity", "poor", "kindness"],
+    relation: "This lifts generosity out of the family ledger and into God's hands."
+  },
+  "Matthew 5:42": {
+    url: "https://biblehub.com/commentaries/matthew/5-42.htm",
+    meaning: "Jesus teaches ready generosity to the one who asks and borrows.",
+    concepts: ["generosity", "giving", "asking"],
+    relation: "This pushes against a closed-hand reflex, while the other passages supply the wisdom to give well."
+  },
+  "Psalm 112:5": {
+    url: "https://biblehub.com/commentaries/psalms/112-5.htm",
+    meaning: "The good man lends — and guides his affairs with discretion.",
+    concepts: ["lending", "discretion", "goodness"],
+    relation: "Generosity and discretion in the same verse: open hand, clear head."
+  },
+  "Philippians 4:6-7": {
+    url: "https://biblehub.com/commentaries/philippians/4-6.htm",
+    meaning: "Anxiety is answered by prayer with thanksgiving, and God's peace guards heart and mind.",
+    concepts: ["anxiety", "prayer", "peace"],
+    relation: "This gives the user a practice, not a platitude: bring the specific fear to God."
+  },
+  "Isaiah 41:10": {
+    url: "https://biblehub.com/commentaries/isaiah/41-10.htm",
+    meaning: "'Fear not, for I am with you' — God's presence and help are the grounds for courage.",
+    concepts: ["fear", "presence", "courage"],
+    relation: "This speaks to the user who feels alone inside the decision."
+  },
+  "Psalm 56:3-4": {
+    url: "https://biblehub.com/commentaries/psalms/56-3.htm",
+    meaning: "David's rule for fear: 'What time I am afraid, I will trust in thee.'",
+    concepts: ["fear", "trust"],
+    relation: "Trust here is a decision made in the moment of fear, not the absence of it."
+  },
+  "2 Timothy 1:7": {
+    url: "https://biblehub.com/commentaries/2_timothy/1-7.htm",
+    meaning: "God gives not a spirit of fear, but of power, love, and a sound mind.",
+    concepts: ["fear", "sound mind", "courage"],
+    relation: "A sound mind is God's gift to decide with — fear is not the counselor to obey."
+  },
+  "Joshua 1:9": {
+    url: "https://biblehub.com/commentaries/joshua/1-9.htm",
+    meaning: "Courage is commanded because God goes with his people into the new ground.",
+    concepts: ["courage", "new beginnings", "presence"],
+    relation: "This fits decisions that require stepping forward before the outcome is visible."
+  },
+  "Matthew 6:33-34": {
+    url: "https://biblehub.com/commentaries/matthew/6-33.htm",
+    meaning: "Seek God's kingdom first; tomorrow's trouble is tomorrow's portion.",
+    concepts: ["worry", "priorities", "today"],
+    relation: "This helps the user set down the whole future and carry only today."
+  },
+  "Psalm 34:18": {
+    url: "https://biblehub.com/commentaries/psalms/34-18.htm",
+    meaning: "The Lord is near the brokenhearted and saves the crushed in spirit.",
+    concepts: ["grief", "brokenhearted", "nearness"],
+    relation: "For the grieving user: nearness, not distance, is God's posture toward sorrow."
+  },
+  "John 11:33-35": {
+    url: "https://biblehub.com/commentaries/john/11-33.htm",
+    meaning: "Jesus, troubled at his friend's tomb, wept — though resurrection stood minutes away.",
+    concepts: ["grief", "tears", "Jesus"],
+    relation: "Tears are not unbelief. This gives the user permission to grieve honestly."
+  },
+  "2 Corinthians 1:3-4": {
+    url: "https://biblehub.com/commentaries/2_corinthians/1-3.htm",
+    meaning: "God comforts us in our trouble so that we can comfort others with the same comfort.",
+    concepts: ["comfort", "trouble", "mercy"],
+    relation: "Present pain can become future ministry — and receiving comfort now is part of it."
+  },
+  "Revelation 21:4": {
+    url: "https://biblehub.com/commentaries/revelation/21-4.htm",
+    meaning: "God will wipe away every tear; death, sorrow, and pain will end.",
+    concepts: ["hope", "grief", "eternity"],
+    relation: "Grief is real, and it is not the final word. This anchors hope without denying loss."
+  },
+  "Matthew 5:4": {
+    url: "https://biblehub.com/commentaries/matthew/5-4.htm",
+    meaning: "'Blessed are they that mourn, for they shall be comforted.'",
+    concepts: ["mourning", "comfort", "blessing"],
+    relation: "Jesus calls mourners blessed — comfort is promised to those who grieve, not those who hide it."
+  },
+  "Proverbs 22:6": {
+    url: "https://biblehub.com/commentaries/proverbs/22-6.htm",
+    meaning: "Training a child in the way he should go bears fruit across a lifetime.",
+    concepts: ["parenting", "training", "children"],
+    relation: "This gives parents the long view: today's ordinary faithfulness is not wasted."
+  },
+  "Deuteronomy 6:6-7": {
+    url: "https://biblehub.com/commentaries/deuteronomy/6-6.htm",
+    meaning: "God's words are to be in the heart, then taught in the flow of daily life — sitting, walking, lying down, rising.",
+    concepts: ["parenting", "teaching", "daily life"],
+    relation: "Formation happens in ordinary moments, not only in formal lessons."
+  },
+  "Ephesians 6:4": {
+    url: "https://biblehub.com/commentaries/ephesians/6-4.htm",
+    meaning: "Fathers must not provoke their children to anger, but bring them up in nurture and instruction.",
+    concepts: ["parenting", "discipline", "fathers"],
+    relation: "Authority with restraint: firm training that never crushes the child's spirit."
+  },
+  "Psalm 127:3": {
+    url: "https://biblehub.com/commentaries/psalms/127-3.htm",
+    meaning: "Children are a heritage and a reward from the Lord.",
+    concepts: ["children", "gift", "heritage"],
+    relation: "This resets the frame on hard parenting days: the child is a gift, not an interruption."
+  },
+  "Proverbs 29:17": {
+    url: "https://biblehub.com/commentaries/proverbs/29-17.htm",
+    meaning: "Correcting a child brings rest and delight to the parent's soul.",
+    concepts: ["discipline", "children", "rest"],
+    relation: "Loving discipline is presented as a kindness to the whole household, not a burden."
+  },
   "Matthew 19:3-9": {
     url: "https://biblehub.com/commentaries/matthew/19-3.htm",
     meaning: "Jesus answers a divorce question by returning to God's creation design for marriage, covenant union, and the seriousness of putting away a spouse.",
@@ -373,7 +536,7 @@ function renderPassageBlock(ref, guide, userText) {
 const TOPIC_GUIDES = [
   {
     name: "Marriage, Divorce, Separation, Covenant",
-    keywords: ["divorce", "divorced", "separate", "separation", "marriage", "married", "husband", "wife", "spouse", "adultery", "affair", "abuse", "unsafe"],
+    keywords: ["divorce", "divorced", "separate", "separation", "marriage", "married", "husband", "wife", "spouse", "adultery", "affair", "abuse", "unsafe", "separated", "cheating", "cheated", "unfaithful", "custody", "leaving my husband", "leaving my wife"],
     themes: ["marriage covenant", "truth", "repentance", "forgiveness", "wise counsel", "peace", "safety", "hardness of heart"],
     principle: "Biblical wisdom treats marriage as a serious covenant before God, while also calling people to truth, repentance, peace, wise counsel, and protection from danger. A decision about divorce should not be made from anger, fear, pressure, or pride, and it should not ignore serious sin, abandonment, abuse, or safety concerns.",
     stories: [
@@ -387,7 +550,7 @@ const TOPIC_GUIDES = [
   },
   {
     name: "Career, Job Offer, Work",
-    keywords: ["job", "offer", "career", "boss", "work", "promotion", "quit", "resign", "salary", "relocate", "employment"],
+    keywords: ["job", "offer", "career", "boss", "work", "promotion", "quit", "resign", "salary", "relocate", "employment", "fired", "laid off", "layoff", "promoted", "quit my job", "offer letter", "new job", "job offer", "coworker", "workplace"],
     themes: ["calling", "provision", "wise counsel", "diligence", "stewardship", "family impact"],
     principle: "Biblical wisdom considers provision, integrity, diligence, wise counsel, family responsibility, and whether a choice draws you toward faithfulness rather than only toward money or status.",
     stories: ["Joseph's work in Egypt shows faithfulness, preparation, and wise stewardship under pressure.", "Daniel's service in Babylon shows integrity while working inside a difficult system."],
@@ -397,7 +560,7 @@ const TOPIC_GUIDES = [
   },
   {
     name: "Money, Debt, Mortgage, Major Purchase",
-    keywords: ["mortgage", "house", "buy", "purchase", "debt", "loan", "money", "finance", "investment", "business", "price", "payment"],
+    keywords: ["mortgage", "house", "buy", "purchase", "debt", "loan", "money", "finance", "investment", "business", "price", "payment", "credit card", "budget", "afford", "bills", "save money", "savings account", "monthly payment"],
     themes: ["stewardship", "debt caution", "contentment", "counting the cost", "wise planning"],
     principle: "Biblical wisdom calls for stewardship, counting the cost, avoiding presumption, and refusing to let fear, greed, or pressure control financial decisions.",
     stories: ["Jesus' teaching about counting the cost warns against beginning what you cannot finish.", "Joseph's preparation before famine shows planning, saving, and stewardship."],
@@ -407,7 +570,7 @@ const TOPIC_GUIDES = [
   },
   {
     name: "Retirement, Later Life, Planning",
-    keywords: ["retire", "retirement", "pension", "social security", "older", "later life", "quit working"],
+    keywords: ["retire", "retirement", "pension", "social security", "older", "later life", "quit working", "401k", "retiring", "fixed income", "medicare"],
     themes: ["stewardship", "purpose", "provision", "family responsibility", "wisdom with age"],
     principle: "Biblical wisdom treats later-life decisions as stewardship decisions, not merely comfort decisions. Retirement planning should consider provision, purpose, family responsibilities, generosity, and faithful use of remaining years.",
     stories: ["Joseph's preparation for famine shows wise planning before a future season arrives.", "Moses' later years show that age does not remove purpose or calling."],
@@ -417,13 +580,69 @@ const TOPIC_GUIDES = [
   },
   {
     name: "Relationship Conflict, Forgiveness, Family",
-    keywords: ["relationship", "family", "forgive", "forgiveness", "conflict", "argue", "anger", "parent", "child", "friend", "betrayal"],
+    keywords: ["relationship", "family", "forgive", "forgiveness", "conflict", "argue", "anger", "parent", "child", "friend", "betrayal", "argument", "apologize", "boundary", "boundaries", "mother-in-law", "father-in-law", "sibling", "neighbor", "bitter", "resent"],
     themes: ["forgiveness", "truth", "reconciliation", "humility", "boundaries", "peace"],
     principle: "Biblical wisdom calls for humility, truth, forgiveness, repentance, and peacemaking, while not pretending that sin, harm, or repeated betrayal should be ignored.",
     stories: ["Joseph forgiving his brothers shows mercy without denying real wrongdoing.", "Jacob and Esau's reunion shows humility and reconciliation after long conflict."],
     references: ["Genesis 50:15-21", "Matthew 18:15-17", "Ephesians 5:21-33", "Romans 12:18", "Proverbs 15:1", "James 1:5"],
     questions: ["What truth needs to be spoken plainly?", "What repentance or change is needed?", "Are you confusing forgiveness with pretending nothing happened?"],
     next: "Pray, slow your speech, seek peace where possible, and get wise counsel if the conflict is serious or recurring."
+  },
+  {
+    name: "Lending, Borrowing, and Family Money",
+    keywords: ["lend", "lending", "loan", "borrow", "borrower", "co-sign", "cosign", "owes me", "pay me back", "lend money", "family member", "relative", "loan money", "borrow money"],
+    themes: ["generosity with wisdom", "mercy", "clear expectations", "protecting the relationship", "stewardship"],
+    principle: "Biblical wisdom holds generosity and caution together. Scripture commends lending to a brother in need and even giving without demanding return, and it also warns plainly that borrowing creates bondage and that unpaid debts poison relationships. The wise pattern is to decide beforehand whether this is a loan you will enforce or a gift you can release, to lend only what your own household can carry, and to put expectations in the open before money changes hands — because unclear money between family members is how small loans become lasting wounds.",
+    stories: [
+      "Nehemiah confronted the nobles of Judah for charging their own brothers interest and taking their fields as pledges (Nehemiah 5). He did not treat lending among family as a mere business matter: he called it back to mercy, made the leaders restore what they had taken, and the people kept their word — the relationships of the whole community were repaired.",
+      "The widow in 2 Kings 4 came to Elisha crushed by a creditor coming for her sons. The way out began with what she already had in the house and ended with the debt paid and enough left to live on — a picture of God opening a path out of debt bondage rather than deeper into it.",
+      "Jesus taught his followers to lend expecting nothing back (Luke 6:35) — not as carelessness, but as a heart free enough that the loan cannot own the relationship."
+    ],
+    references: ["Luke 6:34-35", "Psalm 37:21", "Deuteronomy 15:7-8", "Proverbs 22:7", "Proverbs 19:17", "Matthew 5:42", "Psalm 112:5", "Proverbs 11:14"],
+    questions: ["Could you give this amount as a gift and never mention it again? If not, is it wise to call it a loan?", "What exactly are the terms — amount, purpose, and when it comes back — and are they written down where both of you can see them?", "What will this do to the relationship if it is never repaid?", "Is this loan helping the person change the pattern, or funding the pattern that put them here?", "What does your own household need first, before this money leaves it?"],
+    next: "Decide in advance whether it is a gift or a loan, lend only what your household can carry, write the terms down together, and get wise counsel before money changes hands."
+  },
+  {
+    name: "Fear, Anxiety, and Worry",
+    keywords: ["afraid", "fear", "anxious", "anxiety", "worry", "worried", "scared", "panic", "terrified", "nervous", "overwhelmed", "sleepless", "fearful"],
+    themes: ["trust", "peace", "God's presence", "prayer", "one day at a time", "courage"],
+    principle: "Scripture never treats fear as a small thing or answers it with a slogan. Again and again the pattern is presence before outcome: God says 'fear not' not because the danger is imaginary, but because the person facing it is not alone. The biblical way through anxiety is to bring the fear honestly to God in prayer, take the next faithful step in front of you, and leave tomorrow's weight with tomorrow.",
+    stories: [
+      "David wrote Psalm 56 in a season when he had been seized by enemies: 'What time I am afraid, I will trust in thee.' His trust was not denial — he named the danger and chose where to put his weight.",
+      "When Jehoshaphat faced an army he could not beat, he prayed one of the most honest prayers in Scripture: 'We do not know what to do, but our eyes are on you' (2 Chronicles 20). Judah's part was to stand and trust while God fought the battle.",
+      "Jesus in Gethsemane was 'sorrowful and very heavy' before the cross. He prayed honestly, asked for the cup to pass, and then submitted to the Father's will — proof that anguish and faith are not opposites."
+    ],
+    references: ["Philippians 4:6-7", "Isaiah 41:10", "Psalm 56:3-4", "2 Timothy 1:7", "Joshua 1:9", "Matthew 6:33-34", "James 1:5"],
+    questions: ["What exactly am I afraid will happen — and what has God actually promised, versus what I am imagining?", "Is this fear pointing at a real step I should take, or asking me to carry a tomorrow that has not come?", "Who knows I am carrying this? Fear grows in the dark — who can stand with me?", "What is the next faithful step — just the next one — in front of me today?"],
+    next: "Name the fear plainly, bring it to God in prayer, tell one trusted person, and take only the next faithful step today."
+  },
+  {
+    name: "Grief, Loss, and Comfort",
+    keywords: ["grief", "grieving", "died", "death", "passed away", "lost my", "loss of", "funeral", "widow", "widower", "mourning", "miscarriage", "my dad died", "my mom died", "my father died", "my mother died", "lost my father", "lost my mother", "lost my husband", "lost my wife", "lost my son", "lost my daughter", "death of", "terminal", "hospice", "cancer"],
+    themes: ["God's nearness in sorrow", "honest lament", "hope", "comfort that becomes comfort for others", "presence over explanations"],
+    principle: "The Bible does not rush grief or scold it. God is described as near to the brokenhearted, Jesus wept at his friend's grave even knowing resurrection was minutes away, and a large share of the Psalms are laments — honest sorrow prayed out loud. The biblical pattern is to grieve truthfully, grieve in God's presence and in the company of people who will sit with you, and let hope be an anchor rather than a demand to feel better.",
+    stories: [
+      "Jesus stood at the tomb of Lazarus and wept (John 11), though he was about to raise him. The shortest verse in the Bible gives grieving people permanent permission: tears are not a failure of faith.",
+      "Job's friends did their best work in the seven days they sat with him in silence (Job 2:13). Their speeches made things worse; their presence had made things bearable. Grief usually needs presence more than explanations.",
+      "David poured out laments that swing between anguish and trust, sometimes in the same psalm. Scripture kept those prayers in the book — evidence that God would rather hear honest sorrow than polite silence."
+    ],
+    references: ["Psalm 34:18", "John 11:33-35", "2 Corinthians 1:3-4", "Revelation 21:4", "Matthew 5:4", "Psalm 119:105"],
+    questions: ["Am I letting myself grieve honestly, or performing strength for other people?", "Who will simply sit with me in this — and have I let them?", "What decisions can wait until the fog lifts, and which truly cannot?", "Where is God in this, as I actually experience it — and can I pray that honestly?"],
+    next: "Slow every non-essential decision down, stay close to people who will sit with you, and bring the sorrow to God honestly rather than carrying it alone."
+  },
+  {
+    name: "Parenting and Raising Children",
+    keywords: ["parenting", "discipline", "train up", "raising my", "raising our", "my child", "my children", "my kids", "teenager", "toddler", "homeschool", "prodigal", "rebellious"],
+    themes: ["training with patience", "instruction woven into daily life", "discipline without provoking", "children as a heritage", "the long view"],
+    principle: "Scripture treats children as a heritage and a trust, not a project to control. The pattern is training woven into ordinary life — teaching on the road, at the table, at bedtime — with discipline that is firm, consistent, and careful never to provoke a child to despair. Parents aim at the heart over the long years, remembering that the same God who entrusts children to parents also gives parents grace for the many days they get it wrong.",
+    stories: [
+      "Eli the priest was a sincere man whose sons grew corrupt while he restrained them too little (1 Samuel 2–3) — a sobering picture of how avoiding hard correction is itself a decision, with consequences for the whole household.",
+      "Timothy's faith was kindled at home by his grandmother Lois and his mother Eunice (2 Timothy 1:5) — quiet, ordinary faithfulness across two generations shaping the life of a young leader.",
+      "The father in Jesus' parable of the prodigal son (Luke 15) neither chased the boy nor locked the door. He watched the road, ran to meet him, and restored him before the apology was finished — strength and mercy in the same man."
+    ],
+    references: ["Proverbs 22:6", "Deuteronomy 6:6-7", "Ephesians 6:4", "Psalm 127:3", "Proverbs 29:17", "Proverbs 15:1"],
+    questions: ["Am I aiming at my child's heart and character, or only at quiet behavior in the moment?", "Is my discipline consistent and calm — or driven by my embarrassment and temper?", "What am I modeling daily that my child will copy far more than what I say?", "Where do I need counsel from parents further down this road?"],
+    next: "Slow down, aim at the heart rather than the moment, keep discipline firm and calm, and seek counsel from parents whose grown children you respect."
   },
   {
     name: "General Wisdom Decision",
@@ -454,15 +673,27 @@ if (guidanceDisclaimer && guidanceTool && sessionStorage.getItem("wisdomDisclaim
   showGuidanceTool();
 }
 
+const __wcSituation = new URLSearchParams(window.location.search).get("situation");
+if (__wcSituation && situationInput) { situationInput.value = __wcSituation.slice(0, 1200); }
+
+function guideScore(guide, lower) {
+  return guide.keywords.reduce((n, k) => {
+    if (!lower.includes(k)) return n;
+    return n + (k.includes(" ") ? 4 : (k.length >= 6 ? 2 : 1));
+  }, 0);
+}
+function selectGuides(text) {
+  const lower = String(text || "").toLowerCase();
+  const general = TOPIC_GUIDES[TOPIC_GUIDES.length - 1];
+  const ranked = TOPIC_GUIDES.filter(g => g !== general)
+    .map(g => ({ guide: g, score: guideScore(g, lower) }))
+    .filter(r => r.score > 0)
+    .sort((a, b) => b.score - a.score);
+  return { ranked, general };
+}
 function selectGuide(text) {
-  const lower = text.toLowerCase();
-  let best = TOPIC_GUIDES[TOPIC_GUIDES.length - 1];
-  let bestScore = -1;
-  for (const guide of TOPIC_GUIDES) {
-    const score = guide.keywords.reduce((n, k) => n + (lower.includes(k) ? 1 : 0), 0);
-    if (score > bestScore) { best = guide; bestScore = score; }
-  }
-  return best;
+  const { ranked, general } = selectGuides(text);
+  return (ranked.length && ranked[0].score >= 2) ? ranked[0].guide : general;
 }
 
 function fallbackGuidance(text) {
@@ -486,12 +717,18 @@ function escapeHTML(value) {
 }
 
 function referencesForText(guidance, userText) {
-  const guide = selectGuide(userText || guidance || "");
+  const { ranked } = selectGuides(userText || guidance || "");
+  const best = selectGuide(userText || guidance || "");
   const found = [];
   Object.keys(PASSAGES).forEach(ref => {
-    if (guidance && guidance.includes(ref)) found.push(ref);
+    if (!guidance) return;
+    const esc = ref.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    if (new RegExp(esc + "(?![0-9])").test(guidance)) found.push(ref);
   });
-  guide.references.forEach(ref => { if (PASSAGES[ref] && !found.includes(ref)) found.push(ref); });
+  best.references.forEach(ref => { if (PASSAGES[ref] && !found.includes(ref)) found.push(ref); });
+  if (ranked.length > 1 && ranked[1].score >= 2 && ranked[1].score >= ranked[0].score / 2) {
+    ranked[1].guide.references.slice(0, 3).forEach(ref => { if (PASSAGES[ref] && !found.includes(ref)) found.push(ref); });
+  }
   return found.slice(0, 10);
 }
 
@@ -530,6 +767,41 @@ function whatTheBibleSaysHTML(guide, refs, userText) {
   </section>`;
 }
 
+function formatGuidance(guidance) {
+  const HEADERS = ["Situation", "Biblical Topics Found", "Biblical Principle", "Related Biblical Story / Passage", "Additional Biblical Connections", "King James Version Scripture References", "Reflection Questions", "Plain-Language Guidance", "Next Wise Step", "Disclaimer"];
+  const SKIP = { "Situation": 1, "King James Version Scripture References": 1 };
+  const lines = String(guidance || "").split("\n");
+  const sections = [];
+  let cur = null;
+  for (const raw of lines) {
+    const line = raw.trim();
+    const hit = HEADERS.find(h => line === h + ":");
+    if (hit) { cur = { title: hit, body: [] }; sections.push(cur); continue; }
+    if (cur) cur.body.push(raw);
+  }
+  if (!sections.length) return `<pre>${escapeHTML(guidance)}</pre>`;
+  const para = arr => arr.map(s => s.trim()).filter(Boolean).map(s => `<p>${escapeHTML(s)}</p>`).join("");
+  let html = "";
+  for (const sec of sections) {
+    if (SKIP[sec.title]) continue;
+    const bodyText = sec.body.join("\n").trim();
+    if (!bodyText) continue;
+    if (sec.title === "Reflection Questions") {
+      const items = bodyText.split("\n").map(s => s.replace(/^\s*-\s*/, "").trim()).filter(Boolean);
+      html += `<h4>Reflection Questions</h4><ul>${items.map(i => `<li>${escapeHTML(i)}</li>`).join("")}</ul>`;
+    } else if (sec.title === "Next Wise Step") {
+      html += `<div class="subtle-box"><h4>Next Wise Step</h4><p>${escapeHTML(bodyText)}</p></div>`;
+    } else if (sec.title === "Disclaimer") {
+      html += `<p class="microcopy">${escapeHTML(bodyText)}</p>`;
+    } else if (sec.title === "Biblical Topics Found") {
+      html += `<p class="microcopy"><strong>Biblical topics found:</strong> ${escapeHTML(bodyText)}</p>`;
+    } else {
+      html += `<h4>${sec.title}</h4>${para(sec.body)}`;
+    }
+  }
+  return html || `<pre>${escapeHTML(guidance)}</pre>`;
+}
+
 function guidanceToHTML(guidance, userText) {
   const guide = selectGuide(userText || guidance || "");
   const refs = referencesForText(guidance, userText);
@@ -549,7 +821,7 @@ function guidanceToHTML(guidance, userText) {
       </div>
       <div class="passage-links" id="passageLinks">${buttons}</div>
     </div>` : "";
-  return `${passageHTML}<div class="guidance-text"><h3>Biblical Guidance</h3><pre>${escapeHTML(guidance)}</pre></div>`;
+  return `${passageHTML}<div class="guidance-text"><h3>Biblical Guidance</h3>${formatGuidance(guidance)}</div>`;
 }
 
 function attachPassageHandlers(userText) {
