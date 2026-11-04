@@ -27,6 +27,10 @@ Relationship Conflict / Forgiveness / Family:
 Topics: forgiveness, truth, reconciliation, humility, boundaries, peace.
 Passages/stories: Joseph forgiving brothers (Genesis 50:15-21); Matthew 18:15-17; Ephesians 4:31-32; Romans 12:18; Proverbs 15:1; James 1:19-20.
 
+Taxes / Government / Civic Duty:
+Topics: rendering what is owed, honesty, conscience, submission to authority, God's claim above all, restitution.
+Passages/stories: Matthew 22:21; Romans 13:6-7; Matthew 17:27; 1 Peter 2:13-17; Luke 19:8; Jesus and the tribute coin (Matthew 22); the temple tax coin from the fish (Matthew 17:24-27); Zacchaeus repaying fourfold (Luke 19).
+
 General Decision Wisdom:
 Topics: prayer, wise counsel, patience, motives, fruit, obedience.
 Passages/stories: Solomon asks for wisdom (1 Kings 3); James 1:5; Proverbs 3:5-6; Proverbs 11:14; Proverbs 15:22; Galatians 5:22-23; Psalm 119:105.
@@ -179,6 +183,20 @@ const TOPIC_GUIDES = [
     references: ["Proverbs 22:6", "Deuteronomy 6:6-7", "Ephesians 6:4", "Psalm 127:3", "Proverbs 29:17", "Proverbs 15:1"],
     questions: ["Am I aiming at my child's heart and character, or only at quiet behavior in the moment?", "Is my discipline consistent and calm — or driven by my embarrassment and temper?", "What am I modeling daily that my child will copy far more than what I say?", "Where do I need counsel from parents further down this road?"],
     next: "Slow down, aim at the heart rather than the moment, keep discipline firm and calm, and seek counsel from parents whose grown children you respect."
+  },
+  {
+    name: "Taxes, Government, and Civic Duty",
+    keywords: ["tax", "taxes", "taxpayer", "irs", "internal revenue", "pay taxes", "paying taxes", "file taxes", "tax return", "government", "authorities", "obey the law", "caesar", "render unto", "civic", "citizen", "tribute"],
+    themes: ["rendering what is owed", "honesty", "conscience", "submission to authority", "God's claim above all"],
+    principle: "Scripture answers the tax question directly. Jesus, handed the tribute question as a trap, answered: render unto Caesar the things that are Caesar's, and unto God the things that are God's — Caesar's claim is real but limited; God's is total. Jesus also paid the temple tax he was exempt from, 'lest we should offend them.' Paul treats paying taxes as a matter of conscience, not mere compliance: the authorities are God's servants for order, and the believer renders to all their dues — tribute, custom, respect, honor — honestly and without cheating. The biblical question is never really whether to render what is owed; it is whether we do it honestly, and whether we remember whose we ultimately are.",
+    stories: [
+      "When the Pharisees tried to trap Jesus with the tax question — either answer costs him — he asked for the coin, pointed to Caesar's image stamped on it, and split the claims cleanly: Caesar gets his coin back; God gets everything that bears God's image, which is you (Matthew 22).",
+      "Jesus told Peter he was exempt from the temple tax — 'then are the children free' — and paid it anyway, with a coin from a fish's mouth, 'lest we should offend them' (Matthew 17). He paid what he did not strictly owe, for the sake of peace and witness.",
+      "Zacchaeus was a chief tax collector who had grown rich cheating people on their taxes. Meeting Jesus did not make him argue about the rates; it made him give half his goods to the poor and repay everyone he had cheated fourfold (Luke 19). Honesty about money owed, in both directions, is what repentance looked like for the man closest to the tax system."
+    ],
+    references: ["Matthew 22:21", "Romans 13:6-7", "Matthew 17:27", "1 Peter 2:13-17", "Luke 19:8"],
+    questions: ["Am I asking whether I owe this, or looking for permission not to pay what I know I owe?", "Is my return honest in every line — income, deductions, and the figures I hope no one checks?", "Do I render grudgingly and resentfully, or as a matter of conscience before God?", "Where the law allows a legitimate deduction or appeal, am I using it openly — and where I have underpaid or cheated, have I made it right?"],
+    next: "Pay what is owed, file honestly, use legitimate deductions and appeals in the open, and make any past cheating right. If an amount or an assessment looks wrong, dispute it through the proper channels rather than quietly not paying."
   },
   {
     name: "General Wisdom Decision",

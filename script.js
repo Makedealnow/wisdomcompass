@@ -14,6 +14,16 @@ let latestGuidance = "";
 let latestRenderedText = "";
 
 const PASSAGES = {
+  "Matthew 22:21": { title: "Matthew 22:21 — King James Version", text: `21 They say unto him, Caesar's. Then saith he unto them, Render therefore unto Caesar the things which are Caesar's; and unto God the things that are God's.` },
+  "Romans 13:6-7": { title: "Romans 13:6-7 — King James Version", text: `6 For for this cause pay ye tribute also: for they are God's ministers, attending continually upon this very thing.
+7 Render therefore to all their dues: tribute to whom tribute is due; custom to whom custom; fear to whom fear; honour to whom honour.` },
+  "Matthew 17:27": { title: "Matthew 17:27 — King James Version", text: `27 Notwithstanding, lest we should offend them, go thou to the sea, and cast an hook, and take up the fish that first cometh up; and when thou hast opened his mouth, thou shalt find a piece of money: that take, and give unto them for me and thee.` },
+  "1 Peter 2:13-17": { title: "1 Peter 2:13-17 — King James Version", text: `13 Submit yourselves to every ordinance of man for the Lord's sake: whether it be to the king, as supreme;
+14 Or unto governors, as unto them that are sent by him for the punishment of evildoers, and for the praise of them that do well.
+15 For so is the will of God, that with well doing ye may put to silence the ignorance of foolish men:
+16 As free, and not using your liberty for a cloke of maliciousness, but as the servants of God.
+17 Honour all men. Love the brotherhood. Fear God. Honour the king.` },
+  "Luke 19:8": { title: "Luke 19:8 — King James Version", text: `8 And Zacchaeus stood, and said unto the Lord; Behold, Lord, the half of my goods I give to the poor; and if I have taken any thing from any man by false accusation, I restore him fourfold.` },
   "Genesis 2:24": { title: "Genesis 2:24 — King James Version", text: `24 Therefore shall a man leave his father and his mother, and shall cleave unto his wife: and they shall be one flesh.` },
   "Proverbs 18:22": { title: "Proverbs 18:22 — King James Version", text: `22 Whoso findeth a wife findeth a good thing, and obtaineth favour of the LORD.` },
   "Proverbs 31:10": { title: "Proverbs 31:10 — King James Version", text: `10 Who can find a virtuous woman? for her price is far above rubies.` },
@@ -157,6 +167,36 @@ const PASSAGES = {
 
 
 const COMMENTARY = {
+  "Matthew 22:21": {
+    url: "https://biblehub.com/commentaries/matthew/22-21.htm",
+    meaning: "Jesus separates the claims cleanly: the coin bears Caesar's image and goes back to Caesar; the person bears God's image and belongs wholly to God.",
+    concepts: ["taxes", "allegiance", "conscience"],
+    relation: "This helps the user see that rendering what is owed and belonging wholly to God are not in competition."
+  },
+  "Romans 13:6-7": {
+    url: "https://biblehub.com/commentaries/romans/13-6.htm",
+    meaning: "Paul grounds paying taxes in conscience: the authorities serve God's ordering of society, so dues are rendered as unto God, not merely under threat of penalty.",
+    concepts: ["taxes", "authority", "conscience", "dues"],
+    relation: "This helps the user treat an honest return as an act of obedience before God, not just compliance."
+  },
+  "Matthew 17:27": {
+    url: "https://biblehub.com/commentaries/matthew/17-27.htm",
+    meaning: "Jesus claims the exemption — 'then are the children free' — and pays anyway to avoid needless offense: peace and witness outranked insisting on his right.",
+    concepts: ["example of Jesus", "peace", "witness", "rights surrendered"],
+    relation: "This helps the user weigh whether insisting on a technical right is worth the offense it causes."
+  },
+  "1 Peter 2:13-17": {
+    url: "https://biblehub.com/commentaries/1_peter/2-13.htm",
+    meaning: "Peter calls believers to submit to human authorities 'for the Lord's sake' — free people whose liberty is no cloak for wrongdoing: fear God, honour the king.",
+    concepts: ["submission", "freedom", "witness", "honor"],
+    relation: "This helps the user hold the two together: ultimate allegiance to God, and real respect for earthly authority."
+  },
+  "Luke 19:8": {
+    url: "https://biblehub.com/commentaries/luke/19-8.htm",
+    meaning: "Zacchaeus the tax collector, on meeting Jesus, gives half his goods to the poor and repays fourfold everyone he cheated — repentance kept in a ledger.",
+    concepts: ["honesty", "restitution", "taxes", "repentance"],
+    relation: "This helps the user see what making past dishonesty right actually looks like in practice."
+  },
   "Genesis 2:24": {
     url: "https://biblehub.com/commentaries/genesis/2-24.htm",
     meaning: "God's design for marriage from the beginning: leave, cleave, and become one flesh.",
@@ -688,6 +728,20 @@ const TOPIC_GUIDES = [
     references: ["Proverbs 22:6", "Deuteronomy 6:6-7", "Ephesians 6:4", "Psalm 127:3", "Proverbs 29:17", "Proverbs 15:1"],
     questions: ["Am I aiming at my child's heart and character, or only at quiet behavior in the moment?", "Is my discipline consistent and calm — or driven by my embarrassment and temper?", "What am I modeling daily that my child will copy far more than what I say?", "Where do I need counsel from parents further down this road?"],
     next: "Slow down, aim at the heart rather than the moment, keep discipline firm and calm, and seek counsel from parents whose grown children you respect."
+  },
+  {
+    name: "Taxes, Government, and Civic Duty",
+    keywords: ["tax", "taxes", "taxpayer", "irs", "internal revenue", "pay taxes", "paying taxes", "file taxes", "tax return", "government", "authorities", "obey the law", "caesar", "render unto", "civic", "citizen", "tribute"],
+    themes: ["rendering what is owed", "honesty", "conscience", "submission to authority", "God's claim above all"],
+    principle: "Scripture answers the tax question directly. Jesus, handed the tribute question as a trap, answered: render unto Caesar the things that are Caesar's, and unto God the things that are God's — Caesar's claim is real but limited; God's is total. Jesus also paid the temple tax he was exempt from, 'lest we should offend them.' Paul treats paying taxes as a matter of conscience, not mere compliance: the authorities are God's servants for order, and the believer renders to all their dues — tribute, custom, respect, honor — honestly and without cheating. The biblical question is never really whether to render what is owed; it is whether we do it honestly, and whether we remember whose we ultimately are.",
+    stories: [
+      "When the Pharisees tried to trap Jesus with the tax question — either answer costs him — he asked for the coin, pointed to Caesar's image stamped on it, and split the claims cleanly: Caesar gets his coin back; God gets everything that bears God's image, which is you (Matthew 22).",
+      "Jesus told Peter he was exempt from the temple tax — 'then are the children free' — and paid it anyway, with a coin from a fish's mouth, 'lest we should offend them' (Matthew 17). He paid what he did not strictly owe, for the sake of peace and witness.",
+      "Zacchaeus was a chief tax collector who had grown rich cheating people on their taxes. Meeting Jesus did not make him argue about the rates; it made him give half his goods to the poor and repay everyone he had cheated fourfold (Luke 19). Honesty about money owed, in both directions, is what repentance looked like for the man closest to the tax system."
+    ],
+    references: ["Matthew 22:21", "Romans 13:6-7", "Matthew 17:27", "1 Peter 2:13-17", "Luke 19:8"],
+    questions: ["Am I asking whether I owe this, or looking for permission not to pay what I know I owe?", "Is my return honest in every line — income, deductions, and the figures I hope no one checks?", "Do I render grudgingly and resentfully, or as a matter of conscience before God?", "Where the law allows a legitimate deduction or appeal, am I using it openly — and where I have underpaid or cheated, have I made it right?"],
+    next: "Pay what is owed, file honestly, use legitimate deductions and appeals in the open, and make any past cheating right. If an amount or an assessment looks wrong, dispute it through the proper channels rather than quietly not paying."
   },
   {
     name: "General Wisdom Decision",
