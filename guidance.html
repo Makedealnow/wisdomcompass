@@ -15,7 +15,7 @@
 <link rel="canonical" href="https://wisdomcompass.net/guidance">
 </head><body>
 <header class="site-header"><a class="logo" href="/">WisdomCompass</a><nav class="nav"><a href="/guidance">Decision Guidance</a><a href="/about">About</a><a href="/business-partners">Partners</a><a class="nav-cta" href="/guidance">Free Guidance</a></nav></header>
-<main><section class="tool-page"><section id="guidanceDisclaimer" class="panel disclaimer-gate"><p class="eyebrow">Before You Continue</p><h1>Informational Guidance Only</h1><p>WisdomCompass provides biblical, spiritual, educational, informational, and entertainment-style guidance only.</p><p>WisdomCompass is not legal, medical, mental health, financial, emergency, dietary, nutrition, or professional advice. You are responsible for your own decisions. For serious or urgent issues, contact a qualified professional or emergency services.</p><button class="button primary" id="agreeDisclaimerBtn">I Agree — Continue</button></section><section id="guidanceTool" class="guidance-tool-hidden"><section class="tool-intro"><p class="eyebrow">Decision Guidance Tool</p><h1>Think clearly before you choose.</h1><p>Describe the decision you are facing. WisdomCompass will help you organize the issue, ask better questions, and identify a wiser next step.</p></section><section class="tool-grid same-screen-grid"><div class="panel form-card"><label for="situation">What decision or situation are you facing?</label><textarea id="situation" placeholder="Example: I am trying to decide whether to change jobs, start a business partnership, make a major purchase, or handle a family conflict."></textarea><div class="button-row"><button class="button primary" id="generateBtn">Search Scripture</button><button class="button secondary" id="clearBtn">Clear</button></div><p class="microcopy">Tip: include the decision, the pressure, who is affected, and what outcome you are considering.</p></div><div class="panel result-panel"><h2>Your Guidance</h2><div id="result" class="result-box empty">Your biblical topic search and guidance will appear here on this same page.</div><button class="button secondary" id="saveBtn" disabled>Save to History</button></div></section><section class="panel history-panel"><div class="history-heading"><h2>Saved History</h2><button class="link-button" id="clearHistoryBtn">Clear History</button></div><div id="historyList"></div></section></section></section><script>
+<main><section class="tool-page"><section id="guidanceDisclaimer" class="panel disclaimer-gate"><p class="eyebrow">Before You Continue</p><h1>Informational Guidance Only</h1><p>WisdomCompass provides biblical, spiritual, educational, informational, and entertainment-style guidance only.</p><p>WisdomCompass is not legal, medical, mental health, financial, emergency, dietary, nutrition, or professional advice. You are responsible for your own decisions. For serious or urgent issues, contact a qualified professional or emergency services.</p><button class="button primary" id="agreeDisclaimerBtn">I Agree — Continue</button></section><section id="guidanceTool" class="guidance-tool-hidden"><section class="tool-intro"><p class="eyebrow">Decision Guidance Tool</p><h1>Think clearly before you choose.</h1><p>Describe the decision you are facing. WisdomCompass will help you organize the issue, ask better questions, and identify a wiser next step.</p></section><section class="tool-grid same-screen-grid"><div class="panel form-card"><label for="situation">What decision or situation are you facing?</label><textarea id="situation" spellcheck="true" lang="en" autocapitalize="sentences" placeholder="Example: I am trying to decide whether to change jobs, start a business partnership, make a major purchase, or handle a family conflict."></textarea><div class="button-row"><button class="button primary" id="generateBtn">Search Scripture</button><button class="button secondary" id="micBtn" type="button" style="display:none">&#127908; Speak</button><button class="button secondary" id="clearBtn">Clear</button></div><p class="microcopy">Tip: include the decision, the pressure, who is affected, and what outcome you are considering.</p></div><div class="panel result-panel"><h2>Your Guidance</h2><div id="result" class="result-box empty">Your biblical topic search and guidance will appear here on this same page.</div><button class="button secondary" id="saveBtn" disabled>Save to History</button></div></section><section class="panel history-panel"><div class="history-heading"><h2>Saved History</h2><button class="link-button" id="clearHistoryBtn">Clear History</button></div><div id="historyList"></div></section></section></section><script>
 const situationInput = document.getElementById("situation");
 const generateBtn = document.getElementById("generateBtn");
 const clearBtn = document.getElementById("clearBtn");
@@ -737,6 +737,42 @@ if (guidanceDisclaimer && guidanceTool && sessionStorage.getItem("wisdomDisclaim
 
 const __wcSituation = new URLSearchParams(window.location.search).get("situation");
 if (__wcSituation && situationInput) { situationInput.value = __wcSituation.slice(0, 1200); }
+
+const micBtn = document.getElementById("micBtn");
+const SpeechRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
+if (micBtn && SpeechRecognitionImpl && situationInput) {
+  micBtn.style.display = "";
+  let recognition = null;
+  let listening = false;
+  micBtn.addEventListener("click", () => {
+    if (listening && recognition) { recognition.stop(); return; }
+    recognition = new SpeechRecognitionImpl();
+    recognition.lang = "en-US";
+    recognition.interimResults = true;
+    recognition.continuous = false;
+    let baseText = situationInput.value.trim();
+    recognition.onresult = (event) => {
+      let finalText = "";
+      let interimText = "";
+      for (const result of event.results) {
+        if (result.isFinal) finalText += result[0].transcript;
+        else interimText += result[0].transcript;
+      }
+      const spoken = (finalText + interimText).trim();
+      if (spoken) situationInput.value = (baseText ? baseText + " " : "") + spoken;
+      if (finalText) baseText = situationInput.value.trim();
+    };
+    recognition.onend = () => { listening = false; micBtn.textContent = "\uD83C\uDFA4 Speak"; micBtn.style.background = ""; micBtn.style.color = ""; };
+    recognition.onerror = () => { listening = false; micBtn.textContent = "\uD83C\uDFA4 Speak"; micBtn.style.background = ""; micBtn.style.color = ""; };
+    try {
+      recognition.start();
+      listening = true;
+      micBtn.textContent = "\u25CF Listening\u2026 tap to stop";
+      micBtn.style.background = "#9c3428";
+      micBtn.style.color = "white";
+    } catch (e) { /* recognition already running */ }
+  });
+}
 
 function guideScore(guide, lower) {
   return guide.keywords.reduce((n, k) => {

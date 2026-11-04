@@ -721,6 +721,42 @@ if (guidanceDisclaimer && guidanceTool && sessionStorage.getItem("wisdomDisclaim
 const __wcSituation = new URLSearchParams(window.location.search).get("situation");
 if (__wcSituation && situationInput) { situationInput.value = __wcSituation.slice(0, 1200); }
 
+const micBtn = document.getElementById("micBtn");
+const SpeechRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
+if (micBtn && SpeechRecognitionImpl && situationInput) {
+  micBtn.style.display = "";
+  let recognition = null;
+  let listening = false;
+  micBtn.addEventListener("click", () => {
+    if (listening && recognition) { recognition.stop(); return; }
+    recognition = new SpeechRecognitionImpl();
+    recognition.lang = "en-US";
+    recognition.interimResults = true;
+    recognition.continuous = false;
+    let baseText = situationInput.value.trim();
+    recognition.onresult = (event) => {
+      let finalText = "";
+      let interimText = "";
+      for (const result of event.results) {
+        if (result.isFinal) finalText += result[0].transcript;
+        else interimText += result[0].transcript;
+      }
+      const spoken = (finalText + interimText).trim();
+      if (spoken) situationInput.value = (baseText ? baseText + " " : "") + spoken;
+      if (finalText) baseText = situationInput.value.trim();
+    };
+    recognition.onend = () => { listening = false; micBtn.textContent = "\uD83C\uDFA4 Speak"; micBtn.style.background = ""; micBtn.style.color = ""; };
+    recognition.onerror = () => { listening = false; micBtn.textContent = "\uD83C\uDFA4 Speak"; micBtn.style.background = ""; micBtn.style.color = ""; };
+    try {
+      recognition.start();
+      listening = true;
+      micBtn.textContent = "\u25CF Listening\u2026 tap to stop";
+      micBtn.style.background = "#9c3428";
+      micBtn.style.color = "white";
+    } catch (e) { /* recognition already running */ }
+  });
+}
+
 function guideScore(guide, lower) {
   return guide.keywords.reduce((n, k) => {
     if (!lower.includes(k)) return n;
