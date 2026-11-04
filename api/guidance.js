@@ -46,6 +46,10 @@ Passages/stories: Psalm 34:18; John 11:33-35 (Jesus wept); 2 Corinthians 1:3-4; 
 Parenting / Raising Children:
 Topics: training with patience, instruction woven into daily life, discipline without provoking, children as a heritage, the long view.
 Passages/stories: Proverbs 22:6; Deuteronomy 6:6-7; Ephesians 6:4; Psalm 127:3; Proverbs 29:17; Eli's sons (1 Samuel 2-3); Lois and Eunice (2 Timothy 1:5); the prodigal's father (Luke 15).
+
+Marriage / Choosing and Beginning Well:
+Topics: covenant by design, choosing a spouse by character, readiness, wise counsel, one flesh, shared direction in faith.
+Passages/stories: Genesis 2:24; Proverbs 18:22; Proverbs 31:10; Ecclesiastes 4:9-12; 1 Corinthians 13:4-7; Song of Solomon 8:7; Ephesians 5:21-33; Ruth and Boaz (Ruth 2-4); Isaac and Rebekah (Genesis 24). Use this topic when the question is about getting married, engagement, or choosing a spouse — not for divorce or marriage trouble.
 `;
 
 // ---- Local guidance engine (mirrors the on-page library in guidance.html) ----
@@ -53,8 +57,22 @@ Passages/stories: Proverbs 22:6; Deuteronomy 6:6-7; Ephesians 6:4; Psalm 127:3; 
 // Data and scoring are kept identical to the page so both paths answer alike.
 const TOPIC_GUIDES = [
   {
+    name: "Marriage — Choosing and Beginning Well",
+    keywords: ["getting married", "get married", "should i marry", "marry my", "marry her", "marry him", "proposal", "propose to", "engaged", "engagement", "fiance", "fiancee", "wedding", "dating", "boyfriend", "girlfriend", "choose a spouse", "future wife", "future husband", "marriage"],
+    themes: ["covenant by design", "choosing wisely", "one flesh", "love as Scripture defines it", "wise counsel and readiness"],
+    principle: "Marriage in Scripture is not a contract to escape but a covenant to enter with open eyes. God designed it from the beginning — a man and a woman leaving, cleaving, and becoming one flesh — and calls finding a spouse a good thing and a favor from the Lord. The biblical emphasis at the threshold is character over chemistry: the kind of person someone is — virtue, honesty, faith, diligence, self-control — will matter every day for decades, long after the wedding day. Wise entry means counsel, honesty about faith, money, and family, and enough time to see who this person is under pressure — because you marry the person they are, not the person you hope they will become.",
+    stories: [
+      "Genesis 2 sets the pattern before there was a single wedding ceremony: the man leaves his father and mother, cleaves to his wife, and the two become one flesh. Marriage is presented as God's own design — a new household, a permanent bond, and a oneness meant to be protected from the very start.",
+      "Ruth and Boaz (Ruth 2–4) is a study in choosing and being chosen well. Ruth's loyalty and diligence were known all over town; Boaz was a man of standing who acted honorably at every step — no games, no shortcuts, everything done openly at the city gate with witnesses. Their marriage began in redemption and became a link in the line of David.",
+      "Isaac and Rebekah (Genesis 24) came together through prayer, counsel, and a servant watching for character. The sign Abraham's servant prayed for was not beauty first but kindness — Rebekah watered the camels of a stranger, work nobody required of her. Character shown to strangers is character you can trust at home."
+    ],
+    references: ["Genesis 2:24", "Proverbs 18:22", "Proverbs 31:10", "Ecclesiastes 4:9-12", "1 Corinthians 13:4-7", "Song of Solomon 8:7", "Ephesians 5:21-33", "Proverbs 11:14"],
+    questions: ["Am I choosing this person's character as it is today — or a version of them I hope marriage will produce?", "Have we talked honestly about faith, money, children, family, and the hard years — or mostly about the wedding?", "What do the people who know me best, and know them, actually say — and have I let myself hear it?", "Are we pulling in the same direction in faith and life, or am I hoping one of us will change later?", "If a wise friend described my exact situation to me, what would I tell them?"],
+    next: "Slow the decision down enough for counsel and honesty: talk through faith, money, family, and the future with open eyes, listen to the people who love you, and treat character — theirs and yours — as the main question."
+  },
+  {
     name: "Marriage, Divorce, Separation, Covenant",
-    keywords: ["divorce", "divorced", "separate", "separation", "marriage", "married", "husband", "wife", "spouse", "adultery", "affair", "abuse", "unsafe", "separated", "cheating", "cheated", "unfaithful", "custody", "leaving my husband", "leaving my wife"],
+    keywords: ["divorce", "divorced", "separate", "separation", "marriage", "married", "husband", "wife", "spouse", "adultery", "affair", "abuse", "unsafe", "separated", "cheating", "cheated", "unfaithful", "custody", "leaving my husband", "leaving my wife", "separating", "falling apart", "unhappy", "miserable"],
     themes: ["marriage covenant", "truth", "repentance", "forgiveness", "wise counsel", "peace", "safety", "hardness of heart"],
     principle: "Biblical wisdom treats marriage as a serious covenant before God, while also calling people to truth, repentance, peace, wise counsel, and protection from danger. A decision about divorce should not be made from anger, fear, pressure, or pride, and it should not ignore serious sin, abandonment, abuse, or safety concerns.",
     stories: [
@@ -150,7 +168,7 @@ const TOPIC_GUIDES = [
   },
   {
     name: "Parenting and Raising Children",
-    keywords: ["parenting", "discipline", "train up", "raising my", "raising our", "my child", "my children", "my kids", "teenager", "toddler", "homeschool", "prodigal", "rebellious"],
+    keywords: ["parenting", "discipline", "train up", "raising my", "raising our", "my child", "my children", "my kids", "teenager", "toddler", "homeschool", "prodigal", "rebellious", "pregnant", "pregnancy", "have a baby", "first child", "new baby"],
     themes: ["training with patience", "instruction woven into daily life", "discipline without provoking", "children as a heritage", "the long view"],
     principle: "Scripture treats children as a heritage and a trust, not a project to control. The pattern is training woven into ordinary life — teaching on the road, at the table, at bedtime — with discipline that is firm, consistent, and careful never to provoke a child to despair. Parents aim at the heart over the long years, remembering that the same God who entrusts children to parents also gives parents grace for the many days they get it wrong.",
     stories: [

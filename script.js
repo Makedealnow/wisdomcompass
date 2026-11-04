@@ -14,6 +14,18 @@ let latestGuidance = "";
 let latestRenderedText = "";
 
 const PASSAGES = {
+  "Genesis 2:24": { title: "Genesis 2:24 — King James Version", text: `24 Therefore shall a man leave his father and his mother, and shall cleave unto his wife: and they shall be one flesh.` },
+  "Proverbs 18:22": { title: "Proverbs 18:22 — King James Version", text: `22 Whoso findeth a wife findeth a good thing, and obtaineth favour of the LORD.` },
+  "Proverbs 31:10": { title: "Proverbs 31:10 — King James Version", text: `10 Who can find a virtuous woman? for her price is far above rubies.` },
+  "Ecclesiastes 4:9-12": { title: "Ecclesiastes 4:9-12 — King James Version", text: `9 Two are better than one; because they have a good reward for their labour.
+10 For if they fall, the one will lift up his fellow: but woe to him that is alone when he falleth; for he hath not another to help him up.
+11 Again, if two lie together, then they have heat: but how can one be warm alone?
+12 And if one prevail against him, two shall withstand him; and a threefold cord is not quickly broken.` },
+  "Song of Solomon 8:7": { title: "Song of Solomon 8:7 — King James Version", text: `7 Many waters cannot quench love, neither can the floods drown it: if a man would give all the substance of his house for love, it would utterly be contemned.` },
+  "1 Corinthians 13:4-7": { title: "1 Corinthians 13:4-7 — King James Version", text: `4 Charity suffereth long, and is kind; charity envieth not; charity vaunteth not itself, is not puffed up,
+5 Doth not behave itself unseemly, seeketh not her own, is not easily provoked, thinketh no evil;
+6 Rejoiceth not in iniquity, but rejoiceth in the truth;
+7 Beareth all things, believeth all things, hopeth all things, endureth all things.` },
   "Psalm 37:21": { title: "Psalm 37:21 — King James Version", text: `21 The wicked borroweth, and payeth not again: but the righteous sheweth mercy, and giveth.` },
   "Luke 6:34-35": { title: "Luke 6:34-35 — King James Version", text: `34 And if ye lend to them of whom ye hope to receive, what thank have ye? for sinners also lend to sinners, to receive as much again.
 35 But love ye your enemies, and do good, and lend, hoping for nothing again; and your reward shall be great, and ye shall be the children of the Highest: for he is kind unto the unthankful and to the evil.` },
@@ -145,6 +157,42 @@ const PASSAGES = {
 
 
 const COMMENTARY = {
+  "Genesis 2:24": {
+    url: "https://biblehub.com/commentaries/genesis/2-24.htm",
+    meaning: "God's design for marriage from the beginning: leave, cleave, and become one flesh.",
+    concepts: ["marriage", "covenant", "one flesh", "design"],
+    relation: "This sets the foundation for anyone considering marriage: a new household and a permanent bond, by God's design."
+  },
+  "Proverbs 18:22": {
+    url: "https://biblehub.com/commentaries/proverbs/18-22.htm",
+    meaning: "Finding a wife is finding a good thing, and obtaining favor from the Lord.",
+    concepts: ["marriage", "favor", "blessing"],
+    relation: "Marriage entered wisely is presented as a blessing to pursue with gratitude, not fear."
+  },
+  "Proverbs 31:10": {
+    url: "https://biblehub.com/commentaries/proverbs/31-10.htm",
+    meaning: "A virtuous spouse is rarer and more valuable than rubies.",
+    concepts: ["character", "virtue", "choosing"],
+    relation: "This directs attention to character — the quality that outlasts looks, money, and the wedding day."
+  },
+  "Ecclesiastes 4:9-12": {
+    url: "https://biblehub.com/commentaries/ecclesiastes/4-9.htm",
+    meaning: "Two are better than one: partners lift each other when they fall, and a threefold cord is not quickly broken.",
+    concepts: ["partnership", "support", "companionship"],
+    relation: "This describes what marriage is for: shared labor, mutual rescue, and strength together."
+  },
+  "Song of Solomon 8:7": {
+    url: "https://biblehub.com/commentaries/song_of_solomon/8-7.htm",
+    meaning: "True love cannot be quenched by floods or bought with wealth.",
+    concepts: ["love", "devotion", "covenant love"],
+    relation: "Real love is neither fragile nor for sale — a standard for the love being pledged."
+  },
+  "1 Corinthians 13:4-7": {
+    url: "https://biblehub.com/commentaries/1_corinthians/13-4.htm",
+    meaning: "Love defined by behavior: patient, kind, not self-seeking, keeping no record of wrongs, enduring.",
+    concepts: ["love", "patience", "character"],
+    relation: "This is the measuring stick for both people entering marriage — starting with the reader."
+  },
   "Psalm 37:21": {
     url: "https://biblehub.com/commentaries/psalms/37-21.htm",
     meaning: "Character shows in borrowing: the wicked keep what they borrowed; the righteous are free to be generous.",
@@ -518,8 +566,22 @@ function renderPassageBlock(ref, guide, userText) {
 
 const TOPIC_GUIDES = [
   {
+    name: "Marriage — Choosing and Beginning Well",
+    keywords: ["getting married", "get married", "should i marry", "marry my", "marry her", "marry him", "proposal", "propose to", "engaged", "engagement", "fiance", "fiancee", "wedding", "dating", "boyfriend", "girlfriend", "choose a spouse", "future wife", "future husband", "marriage"],
+    themes: ["covenant by design", "choosing wisely", "one flesh", "love as Scripture defines it", "wise counsel and readiness"],
+    principle: "Marriage in Scripture is not a contract to escape but a covenant to enter with open eyes. God designed it from the beginning — a man and a woman leaving, cleaving, and becoming one flesh — and calls finding a spouse a good thing and a favor from the Lord. The biblical emphasis at the threshold is character over chemistry: the kind of person someone is — virtue, honesty, faith, diligence, self-control — will matter every day for decades, long after the wedding day. Wise entry means counsel, honesty about faith, money, and family, and enough time to see who this person is under pressure — because you marry the person they are, not the person you hope they will become.",
+    stories: [
+      "Genesis 2 sets the pattern before there was a single wedding ceremony: the man leaves his father and mother, cleaves to his wife, and the two become one flesh. Marriage is presented as God's own design — a new household, a permanent bond, and a oneness meant to be protected from the very start.",
+      "Ruth and Boaz (Ruth 2–4) is a study in choosing and being chosen well. Ruth's loyalty and diligence were known all over town; Boaz was a man of standing who acted honorably at every step — no games, no shortcuts, everything done openly at the city gate with witnesses. Their marriage began in redemption and became a link in the line of David.",
+      "Isaac and Rebekah (Genesis 24) came together through prayer, counsel, and a servant watching for character. The sign Abraham's servant prayed for was not beauty first but kindness — Rebekah watered the camels of a stranger, work nobody required of her. Character shown to strangers is character you can trust at home."
+    ],
+    references: ["Genesis 2:24", "Proverbs 18:22", "Proverbs 31:10", "Ecclesiastes 4:9-12", "1 Corinthians 13:4-7", "Song of Solomon 8:7", "Ephesians 5:21-33", "Proverbs 11:14"],
+    questions: ["Am I choosing this person's character as it is today — or a version of them I hope marriage will produce?", "Have we talked honestly about faith, money, children, family, and the hard years — or mostly about the wedding?", "What do the people who know me best, and know them, actually say — and have I let myself hear it?", "Are we pulling in the same direction in faith and life, or am I hoping one of us will change later?", "If a wise friend described my exact situation to me, what would I tell them?"],
+    next: "Slow the decision down enough for counsel and honesty: talk through faith, money, family, and the future with open eyes, listen to the people who love you, and treat character — theirs and yours — as the main question."
+  },
+  {
     name: "Marriage, Divorce, Separation, Covenant",
-    keywords: ["divorce", "divorced", "separate", "separation", "marriage", "married", "husband", "wife", "spouse", "adultery", "affair", "abuse", "unsafe", "separated", "cheating", "cheated", "unfaithful", "custody", "leaving my husband", "leaving my wife"],
+    keywords: ["divorce", "divorced", "separate", "separation", "marriage", "married", "husband", "wife", "spouse", "adultery", "affair", "abuse", "unsafe", "separated", "cheating", "cheated", "unfaithful", "custody", "leaving my husband", "leaving my wife", "separating", "falling apart", "unhappy", "miserable"],
     themes: ["marriage covenant", "truth", "repentance", "forgiveness", "wise counsel", "peace", "safety", "hardness of heart"],
     principle: "Biblical wisdom treats marriage as a serious covenant before God, while also calling people to truth, repentance, peace, wise counsel, and protection from danger. A decision about divorce should not be made from anger, fear, pressure, or pride, and it should not ignore serious sin, abandonment, abuse, or safety concerns.",
     stories: [
@@ -615,7 +677,7 @@ const TOPIC_GUIDES = [
   },
   {
     name: "Parenting and Raising Children",
-    keywords: ["parenting", "discipline", "train up", "raising my", "raising our", "my child", "my children", "my kids", "teenager", "toddler", "homeschool", "prodigal", "rebellious"],
+    keywords: ["parenting", "discipline", "train up", "raising my", "raising our", "my child", "my children", "my kids", "teenager", "toddler", "homeschool", "prodigal", "rebellious", "pregnant", "pregnancy", "have a baby", "first child", "new baby"],
     themes: ["training with patience", "instruction woven into daily life", "discipline without provoking", "children as a heritage", "the long view"],
     principle: "Scripture treats children as a heritage and a trust, not a project to control. The pattern is training woven into ordinary life — teaching on the road, at the table, at bedtime — with discipline that is firm, consistent, and careful never to provoke a child to despair. Parents aim at the heart over the long years, remembering that the same God who entrusts children to parents also gives parents grace for the many days they get it wrong.",
     stories: [
@@ -716,7 +778,7 @@ function referencesForText(guidance, userText) {
 }
 
 function oneSentencePassageRelation(ref, guide, userText) {
-  if (guide && guide.name.includes("Marriage")) {
+  if (guide && guide.name.includes("Divorce")) {
     const map = {
       "Matthew 19:3-9": "similar circumstance: a direct divorce question; meaning: God designed marriage as covenant, and Jesus names sexual immorality as an exception.",
       "Mark 10:2-12": "similar circumstance: a direct divorce question; meaning: divorce is not to be treated casually because marriage joins two into one flesh.",
@@ -736,8 +798,10 @@ function oneSentencePassageRelation(ref, guide, userText) {
 function whatTheBibleSaysHTML(guide, refs, userText) {
   if (!guide) return "";
   let summary = "";
-  if (guide.name.includes("Marriage")) {
+  if (guide.name.includes("Divorce")) {
     summary = "Taken together, these passages show that Scripture treats marriage as a serious covenant before God, not a casual arrangement. Jesus points back to God's design for lifelong faithfulness and warns against easy divorce, while Matthew 19 also names sexual immorality as an exception. Paul addresses separation, reconciliation, abandonment by an unbelieving spouse, and peace. The wider passages also call for covenant faithfulness, sacrificial love, gentle speech, wise counsel, prayer, and safety where there is danger. Read the passages together before reaching a conclusion.";
+  } else if (guide.name.includes("Beginning")) {
+    summary = "Taken together, these passages treat marriage as God's good design, entered with open eyes. Genesis gives the pattern \u2014 leave, cleave, one flesh. Proverbs calls a spouse of character a treasure and a favor from the Lord. Ecclesiastes shows what the partnership is for: two people lifting each other for a lifetime. And 1 Corinthians 13 defines the love being promised in terms of daily behavior, not feeling. Read together, they point the reader who is considering marriage toward character, counsel, and honesty before the vow.";
   } else {
     summary = `Taken together, these passages emphasize ${guide.themes.join(", ")}. They help compare your situation with biblical patterns instead of relying on one isolated verse. Read the passages together, pray for wisdom, and seek trusted counsel before acting.`;
   }
