@@ -29,6 +29,7 @@ const agreeDisclaimerBtn = document.getElementById("agreeDisclaimerBtn");
 
 let latestGuidance = "";
 let latestRenderedText = "";
+let apiPassages = {};
 
 const PASSAGES = {
   "Matthew 22:21": { title: "Matthew 22:21 — King James Version", text: `21 They say unto him, Caesar's. Then saith he unto them, Render therefore unto Caesar the things which are Caesar's; and unto God the things that are God's.` },
@@ -597,8 +598,12 @@ function studyLinksHTML(ref) {
     <p class="microcopy copyright-note">WisdomCompass displays KJV on this site. NIV and commentary resources open on external study sites.</p>`;
 }
 
+// Passages supplied by the API (whole-Bible search answers) supplement the
+// library embedded above; the local library wins when both have a reference.
+function passageFor(ref) { return PASSAGES[ref] || apiPassages[ref] || null; }
+
 function renderPassageBlock(ref, guide, userText) {
-  const passage = PASSAGES[ref];
+  const passage = passageFor(ref);
   if (!passage) return "";
   const c = commentaryForRef(ref);
   const conceptList = c.concepts.map(item => `<li>${escapeHTML(item)}</li>`).join("");
@@ -863,6 +868,7 @@ async function getGuidance(text) {
   });
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || "Unable to generate guidance.");
+  apiPassages = data.passages || {};
   return data.guidance;
 }
 
@@ -874,14 +880,14 @@ function referencesForText(guidance, userText) {
   const { ranked } = selectGuides(userText || guidance || "");
   const best = selectGuide(userText || guidance || "");
   const found = [];
-  Object.keys(PASSAGES).forEach(ref => {
+  [...Object.keys(apiPassages), ...Object.keys(PASSAGES)].forEach(ref => {
     if (!guidance) return;
     const esc = ref.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     if (new RegExp(esc + "(?![0-9])").test(guidance)) found.push(ref);
   });
-  best.references.forEach(ref => { if (PASSAGES[ref] && !found.includes(ref)) found.push(ref); });
+  best.references.forEach(ref => { if (passageFor(ref) && !found.includes(ref)) found.push(ref); });
   if (ranked.length > 1 && ranked[1].score >= 2 && ranked[1].score >= ranked[0].score / 2) {
-    ranked[1].guide.references.slice(0, 3).forEach(ref => { if (PASSAGES[ref] && !found.includes(ref)) found.push(ref); });
+    ranked[1].guide.references.slice(0, 3).forEach(ref => { if (passageFor(ref) && !found.includes(ref)) found.push(ref); });
   }
   return found.slice(0, 10);
 }
@@ -962,7 +968,7 @@ function guidanceToHTML(guidance, userText) {
   const guide = selectGuide(userText || guidance || "");
   const refs = referencesForText(guidance, userText);
   const firstRef = refs[0];
-  const passage = firstRef ? PASSAGES[firstRef] : null;
+  const passage = firstRef ? passageFor(firstRef) : null;
   const buttons = refs.map((ref, idx) => `<button type="button" class="passage-link ${idx === 0 ? "selected" : ""}" data-ref="${escapeHTML(ref)}">${escapeHTML(ref)}</button>`).join("");
   const bibleSays = whatTheBibleSaysHTML(guide, refs, userText);
   const passageHTML = passage ? `
@@ -987,7 +993,7 @@ function attachPassageHandlers(userText) {
   document.querySelectorAll(".passage-link").forEach(btn => {
     btn.addEventListener("click", () => {
       const ref = btn.getAttribute("data-ref");
-      const passage = PASSAGES[ref];
+      const passage = passageFor(ref);
       if (!passage) return;
       document.querySelectorAll(".passage-link").forEach(b => b.classList.remove("selected"));
       btn.classList.add("selected");
@@ -1022,7 +1028,7 @@ if (generateBtn) {
     resultBox.classList.remove("empty");
     resultBox.classList.add("active-result");
     try { latestGuidance = await getGuidance(text); }
-    catch (error) { console.warn(error); latestGuidance = fallbackGuidance(text); }
+    catch (error) { console.warn(error); apiPassages = {}; latestGuidance = fallbackGuidance(text); }
     latestRenderedText = latestGuidance;
     resultBox.innerHTML = guidanceToHTML(latestGuidance, text);
     resultBox.scrollTop = 0;

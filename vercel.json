@@ -3,6 +3,10 @@
   "functions": {
     "api/search.js": {
       "maxDuration": 30
+    },
+    "api/guidance.js": {
+      "maxDuration": 30,
+      "includeFiles": "data/**"
     }
   }
 }

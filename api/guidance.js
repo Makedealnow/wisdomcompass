@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { readFileSync } from "node:fs";
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -235,6 +236,307 @@ function localFallback(situation) {
   return `Situation:\n${situation}\n\nBiblical Topics Found:\n${guide.themes.join("; ")}\n\nBiblical Principle:\n${guide.principle}\n\nRelated Biblical Story / Passage:\n${guide.stories[0]}\n\nAdditional Biblical Connections:\n${guide.stories.slice(1).join("\n")}\n\nKing James Version Scripture References:\n${guide.references.join("; ")}\n\nReflection Questions:\n${guide.questions.map(q => "- " + q).join("\n")}\n\nPlain-Language Guidance:\nSearch the Scriptures above before deciding. Notice the repeated biblical themes: ${guide.themes.join(", ")}. Do not treat one verse as a shortcut; compare the whole counsel of Scripture, seek wise counsel, and consider the fruit of each possible path.\n\nNext Wise Step:\n${guide.next}\n\nDisclaimer:\nWisdomCompass provides spiritual and biblical guidance only. It is not legal, medical, mental health, financial, or emergency advice. For urgent danger, abuse, self-harm, or emergency situations, contact emergency services, a qualified professional, or trusted local help immediately.`;
 }
 
+// ---- Whole-Bible search (Milestone 2) ----
+// Jeff's locked pipeline, with no AI and no internet material anywhere in the
+// output: the question is prepared into concepts locally, the concepts are
+// matched against Nave's topical index and a full-text scan of the whole KJV,
+// and the matched material is compared (TSK cross-reference reinforcement) and
+// assembled into the same answer shape the guide engine returns. The guides
+// remain the fast path for questions they answer confidently (score >= 4);
+// everything else is answered by this search instead of the old General
+// Wisdom fallback. Data lives in ../data/ (public-domain KJV text, Nave's
+// topics, TSK cross-references, and a concept index built from Nave's entry
+// text) and is loaded lazily on the first search-path request, so guide-path
+// requests never pay the parse/index cost.
+
+function stem(w) {
+  w = w.replace(/'s$/, "").replace(/'$/, "");
+  if (w.length > 4 && w.endsWith("ies")) return w.slice(0, -3) + "y";
+  if (w.length > 5 && w.endsWith("ing")) return w.slice(0, -3);
+  if (w.length > 4 && w.endsWith("ed")) return w.slice(0, -2);
+  if (w.length > 4 && w.endsWith("es")) return w.slice(0, -2);
+  if (w.length > 3 && w.endsWith("s")) return w.slice(0, -1);
+  return w;
+}
+const QUESTION_STOP = new Set(("should would could shall will what when where which who whom whose why how is are was were be been being " +
+  "do does did done i me my we our you your he she it its they them their the a an and or but if then than to of in on at for with by from about into " +
+  "not no bible scripture scriptures verse verses say says said tell tells god lord jesus christ let get stop being go going want wants need needs " +
+  "make makes keep keeps help please really just can may might must am an's declare christian christians acceptable think thinks know").split(" "));
+const SYNONYMS = {
+  bankruptcy: ["debt", "debtor", "surety", "borrow", "insolvent"],
+  bankrupt: ["debt", "debtor"],
+  jealou: ["jealousy", "envy"],
+  envy: ["jealousy"],
+  cremation: ["burial"],
+  cremate: ["burial"],
+  dishonest: ["fraud", "deceit", "falsehood"],
+  partner: ["companion", "fellowship"],
+  busines: ["commerce", "trade", "merchandise"],
+  stranger: ["foreigner", "alien", "sojourner"],
+  kid: ["child", "children"],
+  succes: ["prosperity", "riches"],
+  coworker: ["companion", "fellowship"],
+  boss: ["master", "ruler"],
+  fired: ["dismiss", "servant"],
+  drink: ["drunkenness", "wine"],
+  drunk: ["drunkenness"],
+  angry: ["anger"],
+};
+function conceptsOf(question) {
+  const raw = String(question || "").toLowerCase().match(/[a-z0-9']+/g) || [];
+  const seen = new Set();
+  const concepts = [];
+  for (const tok of raw) {
+    if (tok.length < 3 || QUESTION_STOP.has(tok)) continue;
+    const s = stem(tok);
+    if (s.length < 3 || seen.has(s)) continue;
+    seen.add(s);
+    concepts.push({ stem: s, word: tok, direct: true });
+    for (const syn of SYNONYMS[s] || []) {
+      const ss = stem(syn);
+      if (!seen.has(ss)) { seen.add(ss); concepts.push({ stem: ss, word: syn, direct: false }); }
+    }
+  }
+  return concepts;
+}
+
+// Nave's prints some headings inverted ("Priest, High", "Dead, The"). Display
+// names are de-inverted here, in the displayed text only; the underlying data
+// and all matching keep the original headings.
+function displayTopicName(name) {
+  let depth = 0, idx = -1;
+  for (let i = 0; i < name.length - 1; i++) {
+    const ch = name[i];
+    if (ch === "(") depth++;
+    else if (ch === ")") depth--;
+    else if (ch === "," && depth === 0 && name[i + 1] === " ") { idx = i; break; }
+  }
+  if (idx < 0) return name;
+  const head = name.slice(0, idx).trim();
+  const tail = name.slice(idx + 2).trim();
+  if (/^or\b/i.test(tail)) return name;               // "Chosen, Or Elected" reads best as printed
+  if (tail.toLowerCase() === "the") return "The " + head; // "Lost, The" -> "The Lost"
+  if (/^(of|to|the)\b/i.test(tail)) return head + " " + tail; // "Jesus, the Christ" -> "Jesus the Christ"; "Equality, of Men" -> "Equality of Men"
+  return tail + " " + head;                            // "Priest, High" -> "High Priest"
+}
+
+// Curated bridges across gaps in Nave's see-also graph. Nave's files the
+// Bible's debt-release teaching under "Sabbatic Year" (and its "Release"
+// heading is an empty shell with no references), so Debt is bridged to the
+// heading that actually carries Deuteronomy 15.
+const TOPIC_BRIDGES = { "Debt": ["Sabbatic Year"] };
+
+let SEARCH = null;
+function loadSearch() {
+  if (SEARCH) return SEARCH;
+  const load = (f) => JSON.parse(readFileSync(new URL(`../data/${f}`, import.meta.url), "utf8"));
+  const kjv = load("kjv.json");
+  const topicsData = load("topics.json");
+  const xref = load("xref.json");
+  const entryIndex = load("entry-index.json");
+
+  const topicNameWords = topicsData.topics.map((name) => {
+    const words = name.toLowerCase().match(/[a-z']+/g) || [];
+    return new Set(words.map(stem).filter((w) => w.length >= 3 && !["the", "of", "and"].includes(w)));
+  });
+  const topicByName = new Map(topicsData.topics.map((n, i) => [n, i]));
+
+  const verseKeys = Object.keys(kjv);
+  const ordinal = new Map(verseKeys.map((k, i) => [k, i]));
+  const parsedVerse = verseKeys.map((k) => {
+    const m = k.match(/^(.+?) (\d+):(\d+)$/);
+    return { book: m[1], ch: +m[2], v: +m[3] };
+  });
+  const verseStemSets = verseKeys.map((k) => {
+    const set = new Set();
+    for (const tok of kjv[k].toLowerCase().match(/[a-z']+/g) || []) set.add(stem(tok));
+    return set;
+  });
+  const xrefByVerse = new Map();
+  xref.verses.forEach((v, i) => { if (xref.byVerse[i].length) xrefByVerse.set(v, xref.byVerse[i].map((j) => xref.refs[j])); });
+
+  function parseRef(ref) {
+    let m = ref.match(/^(.+?) (\d+):(\d+)(?:-(?:(\d+):)?(\d+))?$/);
+    if (m) return { book: m[1], ch1: +m[2], v1: +m[3], ch2: m[4] ? +m[4] : +m[2], v2: m[5] ? +m[5] : +m[3], chapterOnly: false };
+    m = ref.match(/^(.+?) (\d+)$/);
+    if (m) return { book: m[1], ch1: +m[2], v1: 1, ch2: +m[2], v2: 999, chapterOnly: true };
+    return null;
+  }
+  function expandRef(ref, cap = 8) {
+    const p = parseRef(ref);
+    if (!p) return { verses: [], truncated: false };
+    const startKey = `${p.book} ${p.ch1}:${p.v1}`;
+    const start = ordinal.get(startKey);
+    if (start === undefined) return { verses: [], truncated: false };
+    const out = [];
+    for (let i = start; i < verseKeys.length && out.length < cap; i++) {
+      const pv = parsedVerse[i];
+      if (pv.book !== p.book || pv.ch > p.ch2 || (pv.ch === p.ch2 && pv.v > p.v2)) break;
+      out.push(verseKeys[i]);
+    }
+    const last = out.length ? parsedVerse[ordinal.get(out[out.length - 1])] : null;
+    const truncated = !last || last.ch < p.ch2 || (last.ch === p.ch2 && last.v < Math.min(p.v2, 900));
+    return { verses: out, truncated };
+  }
+  const firstVerseOf = (ref) => { const p = parseRef(ref); return p ? `${p.book} ${p.ch1}:${p.v1}` : null; };
+
+  // Passage text in the page library's own format (verse number + text, one
+  // verse per line) for the passage panel.
+  function panelPassageText(ref) {
+    const { verses, truncated } = expandRef(ref);
+    if (!verses.length) return null;
+    const text = verses.map((v) => `${parsedVerse[ordinal.get(v)].v} ${kjv[v]}`).join("\n");
+    return truncated ? text + " …" : text;
+  }
+
+  function searchAnswer(question) {
+    const concepts = conceptsOf(question);
+    // topic scoring
+    const topicScore = new Map();
+    const addScore = (ti, pts) => topicScore.set(ti, (topicScore.get(ti) || 0) + pts);
+    for (const c of concepts) {
+      const namePts = c.direct ? 12 : 9, entryPts = c.direct ? 4 : 3;
+      topicsData.topics.forEach((_, ti) => {
+        const words = topicNameWords[ti];
+        if (words.has(c.stem)) addScore(ti, namePts);
+        else if (c.stem.length >= 5) {
+          for (const w of words) if (w.startsWith(c.stem) || c.stem.startsWith(w)) { addScore(ti, namePts - 4); break; }
+        }
+      });
+      for (const ti of entryIndex[c.stem] || []) addScore(ti, entryPts);
+    }
+    let rankedTopics = [...topicScore.entries()].sort((a, b) => b[1] - a[1]);
+    // seeAlso reinforcement from the top two topics
+    for (const [ti] of rankedTopics.slice(0, 2)) {
+      for (const name of topicsData.seeAlso[ti] || []) {
+        const si = topicByName.get(name);
+        if (si !== undefined) addScore(si, 4);
+      }
+    }
+    rankedTopics = [...topicScore.entries()].sort((a, b) => b[1] - a[1]);
+    const strong = rankedTopics.filter(([, s]) => s >= 9);
+    let topTopics = (strong.length ? strong : rankedTopics.filter(([, s]) => s > 0)).slice(0, 3);
+    // curated topic bridges (see TOPIC_BRIDGES note above)
+    for (const [ti] of [...topTopics]) {
+      for (const target of TOPIC_BRIDGES[topicsData.topics[ti]] || []) {
+        const bi = topicByName.get(target);
+        if (bi !== undefined && !topTopics.some(([t]) => t === bi) && topTopics.length < 4) topTopics.push([bi, 0]);
+      }
+    }
+
+    // full-text scoring over the whole KJV
+    const directStems = concepts.filter((c) => c.direct).map((c) => c.stem);
+    const ftScore = new Map();
+    verseStemSets.forEach((set, i) => {
+      let distinct = 0, hits = 0;
+      for (const s of directStems) if (set.has(s)) { distinct++; hits++; }
+      if (distinct) ftScore.set(i, { distinct, hits });
+    });
+    const topVerses = [...ftScore.entries()]
+      .sort((a, b) => b[1].distinct - a[1].distinct || b[1].hits - a[1].hits)
+      .slice(0, 10);
+
+    // candidate references with combined scores
+    const cand = new Map();
+    const addCand = (ref, pts) => cand.set(ref, (cand.get(ref) || 0) + pts);
+    const topicWeight = [10, 7, 5, 5];
+    topTopics.forEach(([ti], r) => {
+      for (const ri of topicsData.byTopic[ti].slice(0, 80)) addCand(topicsData.refs[ri], topicWeight[r]);
+    });
+    for (const [vi, sc] of topVerses) addCand(verseKeys[vi], Math.min(4 + 2 * sc.distinct, 12));
+
+    // comparison step: cross-reference reinforcement (TSK) among candidates
+    const candFirstVerses = new Set([...cand.keys()].map(firstVerseOf).filter(Boolean));
+    for (const ref of [...cand.keys()]) {
+      const fv = firstVerseOf(ref);
+      let boost = 0;
+      for (const t of xrefByVerse.get(fv) || []) if (candFirstVerses.has(firstVerseOf(t))) boost++;
+      if (boost) cand.set(ref, cand.get(ref) + Math.min(boost, 4));
+    }
+    const byScore = [...cand.entries()]
+      .sort((a, b) => b[1] - a[1] || (ordinal.get(firstVerseOf(a[0])) ?? 0) - (ordinal.get(firstVerseOf(b[0])) ?? 0))
+      .map(([ref]) => ref);
+    // Diversity guarantee: Nave's lists each topic's most general passages
+    // first — always carry the first two references of each top topic, then
+    // fill remaining slots by score.
+    const rankedRefs = [];
+    for (const [ti] of topTopics) {
+      for (const ri of topicsData.byTopic[ti].slice(0, 2)) {
+        const r = topicsData.refs[ri];
+        if (!rankedRefs.includes(r)) rankedRefs.push(r);
+      }
+    }
+    for (const r of byScore) {
+      if (rankedRefs.length >= 9) break;
+      if (!rankedRefs.includes(r)) rankedRefs.push(r);
+    }
+    if (!rankedRefs.length) return null;
+
+    // assemble the answer in the site's established shape
+    // De-inversion can make two distinct Nave's headings display identically
+    // (e.g. "Bush, Burning" alongside a literal "Burning Bush") — show each
+    // displayed name once.
+    const topicNames = [...new Set(topTopics.map(([ti]) => displayTopicName(topicsData.topics[ti])))];
+    const themesLine = topicNames.length ? topicNames.join("; ") : "searched across the whole Bible";
+    const passages = rankedRefs.slice(0, 3).map((ref) => {
+      const { verses, truncated } = expandRef(ref);
+      const text = verses.map((v) => kjv[v]).join(" ");
+      return { ref, text: text + (truncated ? " …" : "") };
+    });
+    const panelPassages = {};
+    for (const p of passages) {
+      const t = panelPassageText(p.ref);
+      if (t) panelPassages[p.ref] = { title: `${p.ref} — King James Version`, text: t };
+    }
+    const [firstRef, secondRef] = rankedRefs;
+    const principle =
+      `Scripture addresses ${topicNames.length ? topicNames.map((t) => t.toLowerCase()).join(", ") : "this question"} directly, ` +
+      `and the passages gathered here come at it from law, wisdom, story, and the teaching of Jesus and the apostles. ` +
+      `Read them together rather than one at a time: notice what God commends, what he warns against, and what his people did when they stood where you are standing. ` +
+      `The pattern to weigh your decision against is in the whole set — the clearest passages first — not in any single verse pulled out of its context.`;
+    const questions = [
+      `Which of these passages describes a situation most like mine — and what did faithfulness look like there?`,
+      `What do these passages show God commending, and what do they show him warning against?`,
+      `If I took the plain teaching of ${firstRef} seriously, what would I do differently this week?`,
+    ];
+    const guidance =
+      `Situation:\n${question}\n\n` +
+      `Biblical Topics Found:\n${themesLine}\n\n` +
+      `Biblical Principle:\n${principle}\n\n` +
+      `Related Biblical Story / Passage:\n${passages.length ? `${passages[0].ref}\n${passages[0].text}` : ""}\n\n` +
+      `Additional Biblical Connections:\n${passages.slice(1).map((p) => `${p.ref}\n${p.text}`).join("\n\n")}\n\n` +
+      `King James Version Scripture References:\n${rankedRefs.join("; ")}\n\n` +
+      `Reflection Questions:\n${questions.map((q) => "- " + q).join("\n")}\n\n` +
+      `Plain-Language Guidance:\nSearch the Scriptures above before deciding. Notice the repeated biblical themes: ${topicNames.map((t) => t.toLowerCase()).join(", ")}. Do not treat one verse as a shortcut; compare the whole counsel of Scripture, seek wise counsel, and consider the fruit of each possible path.\n\n` +
+      `Next Wise Step:\nRead the passages above in full — start with ${firstRef}${secondRef ? ` and ${secondRef}` : ""} — and pray through them before you decide. Then talk the decision over with a trusted believer who knows your situation, and take the step that best matches the pattern of Scripture you found.\n\n` +
+      `Disclaimer:\nWisdomCompass provides spiritual and biblical guidance only. It is not legal, medical, mental health, financial, or emergency advice. For urgent danger, abuse, self-harm, or emergency situations, contact emergency services, a qualified professional, or trusted local help immediately.`;
+    return { guidance, passages: panelPassages };
+  }
+
+  SEARCH = { searchAnswer };
+  return SEARCH;
+}
+
+// The guides answer when they are confident (a phrase hit, or stacked word
+// hits, per the score the guide engine already computes); a lone generic
+// keyword no longer hijacks a question into a guide. Below the bar, the
+// whole-Bible search above replaces the old General Wisdom fallback; the
+// General guide is still the last resort if the search finds nothing.
+const GUIDE_CONFIDENT = 4;
+function answerFor(situation) {
+  const lower = String(situation || "").toLowerCase();
+  let bestScore = 0;
+  for (const g of TOPIC_GUIDES) {
+    if (g.name === "General Wisdom Decision") continue;
+    const s = guideScore(g, lower);
+    if (s > bestScore) bestScore = s;
+  }
+  if (bestScore >= GUIDE_CONFIDENT) return { guidance: localFallback(situation) };
+  const r = loadSearch().searchAnswer(situation);
+  if (!r) return { guidance: localFallback(situation) };
+  return r;
+}
+
 // Live AI is OFF by Jeff's decision (Nov 4, 2026): the AI call never succeeded
 // in production and only added a long timeout wait before the built-in library
 // answered. Every request is served by the local guide engine below — instant
@@ -250,7 +552,7 @@ export default async function handler(req, res) {
   try {
     const situation = String(req.body?.situation || "").trim().slice(0, 3000);
     if (!situation) return res.status(400).json({ error: "Please describe your situation first." });
-    if (!AI_ENABLED || !process.env.OPENAI_API_KEY) return res.status(200).json({ guidance: localFallback(situation) });
+    if (!AI_ENABLED || !process.env.OPENAI_API_KEY) return res.status(200).json(answerFor(situation));
 
     const response = await Promise.race([
       client.responses.create({
