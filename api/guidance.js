@@ -217,6 +217,13 @@ function localFallback(situation) {
   return `Situation:\n${situation}\n\nBiblical Topics Found:\n${guide.themes.join("; ")}\n\nBiblical Principle:\n${guide.principle}\n\nRelated Biblical Story / Passage:\n${guide.stories[0]}\n\nAdditional Biblical Connections:\n${guide.stories.slice(1).join("\n")}\n\nKing James Version Scripture References:\n${guide.references.join("; ")}\n\nReflection Questions:\n${guide.questions.map(q => "- " + q).join("\n")}\n\nPlain-Language Guidance:\nSearch the Scriptures above before deciding. Notice the repeated biblical themes: ${guide.themes.join(", ")}. Do not treat one verse as a shortcut; compare the whole counsel of Scripture, seek wise counsel, and consider the fruit of each possible path.\n\nNext Wise Step:\n${guide.next}\n\nDisclaimer:\nWisdomCompass provides spiritual and biblical guidance only. It is not legal, medical, mental health, financial, or emergency advice. For urgent danger, abuse, self-harm, or emergency situations, contact emergency services, a qualified professional, or trusted local help immediately.`;
 }
 
+// Live AI is OFF by Jeff's decision (Nov 4, 2026): the AI call never succeeded
+// in production and only added a long timeout wait before the built-in library
+// answered. Every request is served by the local guide engine below — instant
+// and free. To re-enable AI later, set AI_ENABLED to true (a working, funded
+// OPENAI_API_KEY must be present in the hosting environment).
+const AI_ENABLED = false;
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
@@ -225,7 +232,7 @@ export default async function handler(req, res) {
   try {
     const situation = String(req.body?.situation || "").trim().slice(0, 3000);
     if (!situation) return res.status(400).json({ error: "Please describe your situation first." });
-    if (!process.env.OPENAI_API_KEY) return res.status(200).json({ guidance: localFallback(situation) });
+    if (!AI_ENABLED || !process.env.OPENAI_API_KEY) return res.status(200).json({ guidance: localFallback(situation) });
 
     const response = await Promise.race([
       client.responses.create({
