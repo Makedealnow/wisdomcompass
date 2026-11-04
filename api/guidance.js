@@ -96,7 +96,7 @@ const TOPIC_GUIDES = [
   },
   {
     name: "Money, Debt, Mortgage, Major Purchase",
-    keywords: ["mortgage", "house", "buy", "purchase", "debt", "loan", "money", "finance", "investment", "business", "price", "payment", "credit card", "budget", "afford", "bills", "save money", "savings account", "monthly payment"],
+    keywords: ["mortgage", "house", "buy", "purchase", "debt", "loan", "money", "finance", "investment", "business", "price", "payment", "invest", "credit card", "budget", "afford", "bills", "save money", "savings account", "monthly payment"],
     themes: ["stewardship", "debt caution", "contentment", "counting the cost", "wise planning"],
     principle: "Biblical wisdom calls for stewardship, counting the cost, avoiding presumption, and refusing to let fear, greed, or pressure control financial decisions.",
     stories: ["Jesus' teaching about counting the cost warns against beginning what you cannot finish.", "Joseph's preparation before famine shows planning, saving, and stewardship."],
@@ -126,7 +126,7 @@ const TOPIC_GUIDES = [
   },
   {
     name: "Lending, Borrowing, and Family Money",
-    keywords: ["lend", "lending", "loan", "borrow", "borrower", "co-sign", "cosign", "owes me", "pay me back", "lend money", "family member", "relative", "loan money", "borrow money"],
+    keywords: ["lend", "lending", "loan", "borrow", "borrower", "co-sign", "cosign", "owes me", "pay me back", "lend money", "family member", "relative", "loan money", "borrow money", "lend my", "lending money"],
     themes: ["generosity with wisdom", "mercy", "clear expectations", "protecting the relationship", "stewardship"],
     principle: "Biblical wisdom holds generosity and caution together. Scripture commends lending to a brother in need and even giving without demanding return, and it also warns plainly that borrowing creates bondage and that unpaid debts poison relationships. The wise pattern is to decide beforehand whether this is a loan you will enforce or a gift you can release, to lend only what your own household can carry, and to put expectations in the open before money changes hands — because unclear money between family members is how small loans become lasting wounds.",
     stories: [
@@ -140,7 +140,7 @@ const TOPIC_GUIDES = [
   },
   {
     name: "Fear, Anxiety, and Worry",
-    keywords: ["afraid", "fear", "anxious", "anxiety", "worry", "worried", "scared", "panic", "terrified", "nervous", "overwhelmed", "sleepless", "fearful"],
+    keywords: ["afraid", "fear", "anxious", "anxiety", "worry", "worried", "scared", "panic", "terrified", "nervous", "overwhelmed", "sleepless", "fearful", "stress", "stressed"],
     themes: ["trust", "peace", "God's presence", "prayer", "one day at a time", "courage"],
     principle: "Scripture never treats fear as a small thing or answers it with a slogan. Again and again the pattern is presence before outcome: God says 'fear not' not because the danger is imaginary, but because the person facing it is not alone. The biblical way through anxiety is to bring the fear honestly to God in prayer, take the next faithful step in front of you, and leave tomorrow's weight with tomorrow.",
     stories: [
@@ -154,7 +154,7 @@ const TOPIC_GUIDES = [
   },
   {
     name: "Grief, Loss, and Comfort",
-    keywords: ["grief", "grieving", "died", "death", "passed away", "lost my", "loss of", "funeral", "widow", "widower", "mourning", "miscarriage", "my dad died", "my mom died", "my father died", "my mother died", "lost my father", "lost my mother", "lost my husband", "lost my wife", "lost my son", "lost my daughter", "death of", "terminal", "hospice", "cancer"],
+    keywords: ["grief", "grieving", "died", "death", "passed away", "funeral", "widow", "widower", "mourning", "miscarriage", "comfort", "sorrow", "loss", "my dad died", "my mom died", "my father died", "my mother died", "lost my father", "lost my mother", "lost my husband", "lost my wife", "lost my son", "lost my daughter", "lost my mom", "lost my dad", "loss of my husband", "loss of my wife", "death of", "terminal", "hospice", "cancer"],
     themes: ["God's nearness in sorrow", "honest lament", "hope", "comfort that becomes comfort for others", "presence over explanations"],
     principle: "The Bible does not rush grief or scold it. God is described as near to the brokenhearted, Jesus wept at his friend's grave even knowing resurrection was minutes away, and a large share of the Psalms are laments — honest sorrow prayed out loud. The biblical pattern is to grieve truthfully, grieve in God's presence and in the company of people who will sit with you, and let hope be an anchor rather than a demand to feel better.",
     stories: [
@@ -168,7 +168,7 @@ const TOPIC_GUIDES = [
   },
   {
     name: "Parenting and Raising Children",
-    keywords: ["parenting", "discipline", "train up", "raising my", "raising our", "my child", "my children", "my kids", "teenager", "toddler", "homeschool", "prodigal", "rebellious", "pregnant", "pregnancy", "have a baby", "first child", "new baby"],
+    keywords: ["parenting", "discipline", "train up", "raising my", "raising our", "my child", "my children", "my kids", "teenager", "toddler", "homeschool", "prodigal", "rebellious", "pregnant", "pregnancy", "have a baby", "first child", "new baby", "child", "children", "kids"],
     themes: ["training with patience", "instruction woven into daily life", "discipline without provoking", "children as a heritage", "the long view"],
     principle: "Scripture treats children as a heritage and a trust, not a project to control. The pattern is training woven into ordinary life — teaching on the road, at the table, at bedtime — with discipline that is firm, consistent, and careful never to provoke a child to despair. Parents aim at the heart over the long years, remembering that the same God who entrusts children to parents also gives parents grace for the many days they get it wrong.",
     stories: [
@@ -193,9 +193,11 @@ const TOPIC_GUIDES = [
 ];
 
 function guideScore(guide, lower) {
+  const words = lower.split(/[^a-z0-9-]+/);
   return guide.keywords.reduce((n, k) => {
     if (!lower.includes(k)) return n;
-    return n + (k.includes(" ") ? 4 : (k.length >= 6 ? 2 : 1));
+    if (k.includes(" ")) return n + 4;
+    return n + (words.includes(k) ? 3 : 2);
   }, 0);
 }
 function selectGuide(text) {
@@ -225,12 +227,15 @@ export default async function handler(req, res) {
     if (!situation) return res.status(400).json({ error: "Please describe your situation first." });
     if (!process.env.OPENAI_API_KEY) return res.status(200).json({ guidance: localFallback(situation) });
 
-    const response = await client.responses.create({
+    const response = await Promise.race([
+      client.responses.create({
       model: "gpt-4.1-mini",
       input: `You are WisdomCompass, a biblical research and decision-guidance assistant. The Bible is the primary authority. Do not return the same generic answer for every question. First identify biblical topics from the user situation. Then search for relevant Bible passages, biblical stories, biblical principles, and cross-reference themes. Use the topical guide below as a reference aid, but choose the most relevant passages for the user's exact situation.\n\n${TOPICAL_GUIDE}\n\nReturn exactly these sections. Use Bible references that can be connected to full passages and commentary links on the page:\nSituation:\nBiblical Topics Found:\nBiblical Principle:\nRelated Biblical Story / Passage:\nAdditional Biblical Connections:\nKing James Version Scripture References:\nPlain-Language Guidance:\nNext Wise Step:\nDisclaimer:\n\nRules:\n- Give specific passages and stories, not generic wisdom verses only.
 - In "What the Bible Says About This Situation," summarize how ALL listed passages connect to the user situation, including similar circumstances, meanings, exceptions, qualifications, and alternative actions when Scripture provides them.\n- For divorce/marriage questions, include marriage/divorce passages such as Matthew 19, Mark 10, 1 Corinthians 7, Malachi 2, and related stories if relevant.\n- If abuse, danger, threats, or unsafe conditions are mentioned, say to seek immediate safety and qualified local help.\n- Do not give legal, medical, mental health, financial, or emergency advice.\n- Do not command the user to make a specific life decision. Help them search Scripture and take a wise next step.\n\nUser situation: ${situation}`,
       max_output_tokens: 1100
-    });
+      }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("AI request timed out")), 8000))
+    ]);
     return res.status(200).json({ guidance: response.output_text || localFallback(situation) });
   } catch (error) {
     console.error(error);
