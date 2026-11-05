@@ -29,6 +29,7 @@ const agreeDisclaimerBtn = document.getElementById("agreeDisclaimerBtn");
 
 let latestGuidance = "";
 let latestRenderedText = "";
+let latestLogId = null;
 let apiPassages = {};
 
 const PASSAGES = {
@@ -677,6 +678,7 @@ async function getGuidance(text) {
   const data = await response.json();
   if (!response.ok || !data.guidance) throw new Error(data.error || "Unable to generate guidance.");
   apiPassages = data.passages || {};
+  latestLogId = data.logId || null;
   return data.guidance;
 }
 
@@ -800,6 +802,62 @@ function attachPassageHandlers(userText) {
   });
 }
 
+function sendFeedback(helpful, hoping) {
+  if (!latestLogId) return;
+  fetch("/api/feedback", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ logId: latestLogId, helpful, hoping: hoping || "" })
+  }).catch(() => {});
+}
+
+function mountFeedback() {
+  if (!latestLogId || !resultBox) return;
+  const wrap = document.createElement("div");
+  wrap.className = "feedback-row";
+  wrap.innerHTML = `<span class="feedback-q">Did this help?</span>
+    <button type="button" class="button secondary feedback-btn" data-vote="yes" aria-label="Yes, this helped">\uD83D\uDC4D</button>
+    <button type="button" class="button secondary feedback-btn" data-vote="no" aria-label="Not quite">\uD83D\uDC4E</button>
+    <span class="feedback-thanks microcopy" hidden>Thank you — that helps us improve the search.</span>
+    <div class="feedback-more" hidden>
+      <label class="microcopy" for="hopingText">What were you hoping for? (optional)</label>
+      <div class="feedback-more-row">
+        <input type="text" id="hopingText" maxlength="300" placeholder="In your own words">
+        <button type="button" class="button secondary" id="hopingSend">Send</button>
+      </div>
+    </div>`;
+  resultBox.appendChild(wrap);
+  const thanks = wrap.querySelector(".feedback-thanks");
+  const more = wrap.querySelector(".feedback-more");
+  wrap.querySelectorAll(".feedback-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const vote = btn.getAttribute("data-vote");
+      wrap.querySelectorAll(".feedback-btn").forEach(b => { b.disabled = true; });
+      if (vote === "yes") {
+        sendFeedback(true, "");
+        thanks.hidden = false;
+      } else {
+        // The down-vote counts on the tap itself. The optional line, if
+        // the visitor adds it, is sent as a second record for the same
+        // question; the weekly digest prefers the one carrying the text.
+        sendFeedback(false, "");
+        more.hidden = false;
+        const inp = wrap.querySelector("#hopingText");
+        if (inp) inp.focus();
+      }
+    });
+  });
+  const sendBtn = wrap.querySelector("#hopingSend");
+  if (sendBtn) {
+    sendBtn.addEventListener("click", () => {
+      const inp = wrap.querySelector("#hopingText");
+      sendFeedback(false, inp ? inp.value.trim() : "");
+      more.hidden = true;
+      thanks.hidden = false;
+    });
+  }
+}
+
 function getHistory() { return JSON.parse(localStorage.getItem("wisdomHistory") || "[]"); }
 function setHistory(history) { localStorage.setItem("wisdomHistory", JSON.stringify(history)); }
 function renderHistory() {
@@ -832,6 +890,7 @@ if (generateBtn) {
       apiPassages = {};
       latestGuidance = "";
       latestRenderedText = "";
+      latestLogId = null;
       resultBox.innerHTML = "<strong>The Bible search didn't come back.</strong><p>Something went wrong on our end. Please try again in a moment.</p>";
       resultBox.scrollTop = 0;
       generateBtn.disabled = false;
@@ -842,6 +901,7 @@ if (generateBtn) {
     resultBox.innerHTML = guidanceToHTML(latestGuidance, text);
     resultBox.scrollTop = 0;
     attachPassageHandlers(text);
+    mountFeedback();
     saveBtn.disabled = false;
     generateBtn.disabled = false;
     generateBtn.textContent = "Search Scripture";
@@ -853,6 +913,7 @@ if (clearBtn) {
     situationInput.value = "";
     latestGuidance = "";
     latestRenderedText = "";
+    latestLogId = null;
     resultBox.textContent = "Your biblical topic search and guidance will appear here on this same page.";
     resultBox.classList.add("empty");
     resultBox.classList.remove("active-result");

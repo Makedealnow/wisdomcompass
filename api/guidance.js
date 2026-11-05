@@ -1,66 +1,10 @@
-import OpenAI from "openai";
 import { readFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { logQuestion } from "../lib/sheetlog.js";
 
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-// NOTE (Milestone 3): TOPICAL_GUIDE below is reference text for the disabled
-// AI path only. It is interpolated solely into the dormant OpenAI prompt and
-// can never reach a visitor while AI_ENABLED stays false. The local
-// pre-written guide engine that once answered visitors has been removed
-// entirely; every answer now comes from the whole-Bible search further down.
-const TOPICAL_GUIDE = `
-WISDOMCOMPASS BIBLE SEARCH TOPICS
-
-Marriage / Divorce / Separation:
-Topics: marriage covenant, divorce, reconciliation, adultery, abandonment, hardness of heart, peace, protection, wise counsel, repentance, forgiveness, abuse/safety.
-Primary passages: Matthew 19:3-9; Mark 10:2-12; 1 Corinthians 7:10-16; Malachi 2:14-16; Ephesians 5:21-33; Proverbs 15:1; Proverbs 11:14; James 1:5.
-Related stories/passages: Jesus teaching on divorce; Abigail and Nabal (1 Samuel 25); Hosea and Gomer; Joseph forgiving his brothers (Genesis 50:15-21) when forgiveness is central.
-Safety rule: If the user mentions abuse, danger, threats, violence, or being unsafe, include a clear next step to seek immediate safety and qualified local help. Do not tell them to remain in danger.
-
-Career / Work / Job Offer:
-Topics: calling, provision, integrity, diligence, wise counsel, family impact.
-Passages/stories: Joseph in Egypt (Genesis 41); Daniel in Babylon (Daniel 1); Proverbs 3:5-6; Proverbs 11:14; Colossians 3:23; Proverbs 22:29.
-
-Money / Debt / Mortgage / Business / Major Purchase:
-Topics: stewardship, debt caution, counting cost, contentment, planning, avoiding greed or fear.
-Passages/stories: Luke 14:28-30; Proverbs 22:7; Proverbs 21:5; 1 Timothy 6:6-10; Joseph preparing for famine (Genesis 41); Proverbs 15:22.
-
-Retirement / Later Life Planning:
-Topics: stewardship, purpose, provision, family responsibility, wisdom with age.
-Passages/stories: Psalm 90:12; Proverbs 16:31; Genesis 41:34-36; 1 Timothy 5:8; Proverbs 21:5; Ecclesiastes 3:1; Moses' later calling.
-
-Relationship Conflict / Forgiveness / Family:
-Topics: forgiveness, truth, reconciliation, humility, boundaries, peace.
-Passages/stories: Joseph forgiving brothers (Genesis 50:15-21); Matthew 18:15-17; Ephesians 4:31-32; Romans 12:18; Proverbs 15:1; James 1:19-20.
-
-Taxes / Government / Civic Duty:
-Topics: rendering what is owed, honesty, conscience, submission to authority, God's claim above all, restitution.
-Passages/stories: Matthew 22:21; Romans 13:6-7; Matthew 17:27; 1 Peter 2:13-17; Luke 19:8; Jesus and the tribute coin (Matthew 22); the temple tax coin from the fish (Matthew 17:24-27); Zacchaeus repaying fourfold (Luke 19).
-
-General Decision Wisdom:
-Topics: prayer, wise counsel, patience, motives, fruit, obedience.
-Passages/stories: Solomon asks for wisdom (1 Kings 3); James 1:5; Proverbs 3:5-6; Proverbs 11:14; Proverbs 15:22; Galatians 5:22-23; Psalm 119:105.
-
-Lending / Borrowing / Family Money:
-Topics: generosity with wisdom, mercy, clear expectations, protecting the relationship, stewardship.
-Passages/stories: Luke 6:34-35; Psalm 37:21; Deuteronomy 15:7-8; Proverbs 22:7; Proverbs 19:17; Matthew 5:42; Psalm 112:5; Nehemiah 5 (lending among brothers); 2 Kings 4 (the widow's debt).
-
-Fear / Anxiety / Worry:
-Topics: trust, peace, God's presence, prayer, one day at a time, courage.
-Passages/stories: Philippians 4:6-7; Isaiah 41:10; Psalm 56:3-4; 2 Timothy 1:7; Joshua 1:9; Matthew 6:33-34; Jehoshaphat (2 Chronicles 20); Jesus in Gethsemane.
-
-Grief / Loss / Comfort:
-Topics: God's nearness in sorrow, honest lament, hope, comfort that becomes comfort for others.
-Passages/stories: Psalm 34:18; John 11:33-35 (Jesus wept); 2 Corinthians 1:3-4; Revelation 21:4; Matthew 5:4; Job's friends sitting in silence (Job 2:13).
-
-Parenting / Raising Children:
-Topics: training with patience, instruction woven into daily life, discipline without provoking, children as a heritage, the long view.
-Passages/stories: Proverbs 22:6; Deuteronomy 6:6-7; Ephesians 6:4; Psalm 127:3; Proverbs 29:17; Eli's sons (1 Samuel 2-3); Lois and Eunice (2 Timothy 1:5); the prodigal's father (Luke 15).
-
-Marriage / Choosing and Beginning Well:
-Topics: covenant by design, choosing a spouse by character, readiness, wise counsel, one flesh, shared direction in faith.
-Passages/stories: Genesis 2:24; Proverbs 18:22; Proverbs 31:10; Ecclesiastes 4:9-12; 1 Corinthians 13:4-7; Song of Solomon 8:7; Ephesians 5:21-33; Ruth and Boaz (Ruth 2-4); Isaac and Rebekah (Genesis 24). Use this topic when the question is about getting married, engagement, or choosing a spouse — not for divorce or marriage trouble.
-`;
+// (TOPICAL_GUIDE — the reference text for the old, disabled AI path — was
+// removed in the question-log build, Nov 4, 2026, together with the AI
+// branch itself. The whole-Bible search below is the only answering path.)
 
 
 // ---- Whole-Bible search (Milestone 2; sole answering path since Milestone 3) ----
@@ -468,7 +412,7 @@ function loadSearch() {
       `Plain-Language Guidance:\nSearch the Scriptures above before deciding. Notice the repeated biblical themes: ${topicNames.map((t) => t.toLowerCase()).join(", ")}. Do not treat one verse as a shortcut; compare the whole counsel of Scripture, seek wise counsel, and consider the fruit of each possible path.\n\n` +
       `Next Wise Step:\nRead the passages above in full — start with ${firstRef}${secondRef ? ` and ${secondRef}` : ""} — and pray through them before you decide. Then talk the decision over with a trusted believer who knows your situation, and take the step that best matches the pattern of Scripture you found.\n\n` +
       `Disclaimer:\nWisdomCompass provides spiritual and biblical guidance only. It is not legal, medical, mental health, financial, or emergency advice. For urgent danger, abuse, self-harm, or emergency situations, contact emergency services, a qualified professional, or trusted local help immediately.`;
-    return { guidance, passages: panelPassages };
+    return { guidance, passages: panelPassages, meta: { topics: topicNames, leadRef: rankedRefs[0] || null } };
   }
 
   // How much matching weight a concept carries: topics whose name or entry
@@ -489,38 +433,55 @@ function loadSearch() {
   //      about seeking wisdom, never a stored composed answer.
   function answerSearch(question) {
     let r = searchAnswer(question);
-    if (r) return r;
+    if (r) return { answer: r, level: 1 };
     const concepts = conceptsOf(question);
     if (concepts.length > 1) {
       const weakest = concepts.reduce((a, b) => (conceptWeight(b) < conceptWeight(a) ? b : a));
       r = searchAnswer(question, { concepts: concepts.filter((c) => c !== weakest), relaxed: true });
-      if (r) return r;
+      if (r) return { answer: r, level: 2 };
     }
     if (concepts.length) {
       r = searchAnswer(question, { relaxed: true });
-      if (r) return r;
+      if (r) return { answer: r, level: 3 };
     }
-    return searchAnswer(question, { forceTopic: "Wisdom" });
+    return { answer: searchAnswer(question, { forceTopic: "Wisdom" }), level: 4 };
   }
 
-  SEARCH = { searchAnswer: answerSearch };
+  SEARCH = { searchAnswer: answerSearch, conceptsOf };
   return SEARCH;
 }
 
 // Every question is answered by the whole-Bible search — no guide layer,
 // no threshold, no composed answers (Jeff's decision, Nov 4, 2026). The
 // search's own fallback chain (relaxed retry, then the WISDOM topic through
-// the same machinery) lives inside answerSearch above.
+// the same machinery) lives inside answerSearch above, which also reports
+// which step answered (the level) for the anonymous question log.
+// (The old AI path — TOPICAL_GUIDE, the OpenAI client, and the AI_ENABLED
+// branch — was removed in the question-log build, Nov 4, 2026: AI was off
+// by Jeff's decision, and the dead code only obscured the live search.)
 function answerFor(situation) {
-  return loadSearch().searchAnswer(situation);
+  const { answer } = loadSearch().searchAnswer(situation);
+  return answer ? { guidance: answer.guidance, passages: answer.passages } : answer;
 }
 
-// Live AI is OFF by Jeff's decision (Nov 4, 2026): the AI call never succeeded
-// in production and only added a long timeout wait before the built-in search
-// answered. Every request is served by the whole-Bible search below — instant
-// and free. To re-enable AI later, set AI_ENABLED to true (a working, funded
-// OPENAI_API_KEY must be present in the hosting environment).
-const AI_ENABLED = false;
+// Broad internal category for the question log's demand map only — never
+// shown on the site, never used to shape an answer or an offer. Sensitive
+// areas are flagged exactly as Jeff's partner model requires.
+const CATEGORY_RULES = [
+  ["Money", /\b(debt|money|loan|loans|mortgage|tax|taxes|bankrupt\w*|borrow\w*|lend\w*|credit|bills?|financ\w*|budget|invest\w*|retire\w*|salary|wages?|rent|purchase|buying|sell\w*|price|costs?)\b/],
+  ["Family & Marriage", /\b(marri\w*|husband|wife|spouse|divorc\w*|child|children|kids?|parent\w*|mother|father|family|son|daughter|baby|teen\w*|sibling|brother|sister)\b/],
+  ["Work & Career", /\b(job|work|career|boss|coworker|co-worker|fired|hir\w+|business|employ\w*|office|promotion|quit|resign\w*)\b/],
+  ["Health", /\b(health|sick\w*|illness|doctor|pain|cancer|disease|anxiet\w*|anxious|depress\w*|sleep|weight|diet|medical|hospital|surgery|diagnos\w*)\b/],
+  ["Home", /\b(house|home|landlord|tenant|neighbor\w*|moving|apartment|property|renovat\w*)\b/],
+];
+const SENSITIVE_RE = /\b(grief|grieving|died|death|funeral|abuse|abusive|suicid\w*|self-harm|crisis|miscarriage|widow\w*)\b/;
+function categoryOf(question) {
+  const q = String(question || "").toLowerCase();
+  let cat = "Other";
+  for (const [name, re] of CATEGORY_RULES) if (re.test(q)) { cat = name; break; }
+  if (SENSITIVE_RE.test(q)) cat += " (sensitive — no offers)";
+  return cat;
+}
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -530,24 +491,33 @@ export default async function handler(req, res) {
   try {
     const situation = String(req.body?.situation || "").trim().slice(0, 3000);
     if (!situation) return res.status(400).json({ error: "Please describe your situation first." });
-    if (!AI_ENABLED || !process.env.OPENAI_API_KEY) return res.status(200).json(answerFor(situation));
-
-    const response = await Promise.race([
-      client.responses.create({
-      model: "gpt-4.1-mini",
-      input: `You are WisdomCompass, a biblical research and decision-guidance assistant. The Bible is the primary authority. Do not return the same generic answer for every question. First identify biblical topics from the user situation. Then search for relevant Bible passages, biblical stories, biblical principles, and cross-reference themes. Use the topical guide below as a reference aid, but choose the most relevant passages for the user's exact situation.\n\n${TOPICAL_GUIDE}\n\nReturn exactly these sections. Use Bible references that can be connected to full passages and commentary links on the page:\nSituation:\nBiblical Topics Found:\nBiblical Principle:\nRelated Biblical Story / Passage:\nAdditional Biblical Connections:\nKing James Version Scripture References:\nPlain-Language Guidance:\nNext Wise Step:\nDisclaimer:\n\nRules:\n- Give specific passages and stories, not generic wisdom verses only.
-- In "What the Bible Says About This Situation," summarize how ALL listed passages connect to the user situation, including similar circumstances, meanings, exceptions, qualifications, and alternative actions when Scripture provides them.\n- For divorce/marriage questions, include marriage/divorce passages such as Matthew 19, Mark 10, 1 Corinthians 7, Malachi 2, and related stories if relevant.\n- If abuse, danger, threats, or unsafe conditions are mentioned, say to seek immediate safety and qualified local help.\n- Do not give legal, medical, mental health, financial, or emergency advice.\n- Do not command the user to make a specific life decision. Help them search Scripture and take a wise next step.\n\nUser situation: ${situation}`,
-      max_output_tokens: 1100
-      }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("AI request timed out")), 8000))
-    ]);
-    return res.status(200).json({ guidance: response.output_text || answerFor(situation).guidance });
+    const search = loadSearch();
+    const { answer, level } = search.searchAnswer(situation);
+    if (!answer) return res.status(500).json({ error: "Something went wrong. Please try again." });
+    // Anonymous question log (disclosed on the privacy page): one record
+    // per answered question — the question, the concepts/topics/lead
+    // passage the search used, and which fallback step answered. No
+    // identity of any kind is recorded. Fire-and-forget: the append starts
+    // now and settles on its own, and a logging failure is swallowed — it
+    // can never delay or break the answer. The logId is a per-question
+    // record key (not a visitor identifier); the optional satisfaction
+    // thumbs use it to attach to this question's record.
+    const logId = randomUUID();
+    try {
+      logQuestion([
+        new Date().toISOString(),
+        logId,
+        situation,
+        search.conceptsOf(situation).map((c) => c.stem).join(", "),
+        (answer.meta && answer.meta.topics ? answer.meta.topics : []).join("; "),
+        (answer.meta && answer.meta.leadRef) || "",
+        String(level),
+        categoryOf(situation),
+      ]);
+    } catch { /* logging must never break an answer */ }
+    return res.status(200).json({ guidance: answer.guidance, passages: answer.passages, logId });
   } catch (error) {
     console.error(error);
-    try {
-      return res.status(200).json(answerFor(String(req.body?.situation || "")));
-    } catch {
-      return res.status(500).json({ error: "Something went wrong. Please try again." });
-    }
+    return res.status(500).json({ error: "Something went wrong. Please try again." });
   }
 }

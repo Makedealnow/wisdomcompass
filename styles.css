@@ -57,3 +57,9 @@ body{background:linear-gradient(180deg,#fffdf8 0%,#f7f1e6 52%,#eef3f8 100%)}
 .study-resource-link{display:inline-flex!important;align-items:center!important;justify-content:center!important;text-decoration:none!important;border-radius:12px!important;padding:12px 14px!important;font-size:14px!important;font-weight:900!important;border:2px solid #142a45!important;background:#142a45!important;color:#fff!important;min-width:190px!important}
 .study-resource-link:nth-child(2){background:#fff!important;color:#142a45!important}
 .study-resource-link:nth-child(3){background:#f0e5d3!important;color:#142a45!important}
+.feedback-row{margin-top:18px;padding-top:14px;border-top:1px solid #d8cfc0;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.feedback-q{font-weight:700;color:#142a45}
+.feedback-btn{min-width:46px}
+.feedback-more{flex-basis:100%;margin-top:6px}
+.feedback-more-row{display:flex;gap:8px;margin-top:4px}
+.feedback-more-row input{flex:1;padding:9px 10px;border:1px solid #b9ac97;border-radius:8px;font:inherit}
