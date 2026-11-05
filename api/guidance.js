@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { logQuestion } from "../lib/sheetlog.js";
+import { waitUntil } from "@vercel/functions";
 
 // (TOPICAL_GUIDE — the reference text for the old, disabled AI path — was
 // removed in the question-log build, Nov 4, 2026, together with the AI
@@ -497,24 +498,29 @@ export default async function handler(req, res) {
     // Anonymous question log (disclosed on the privacy page): one record
     // per answered question — the question, the concepts/topics/lead
     // passage the search used, and which fallback step answered. No
-    // identity of any kind is recorded. Fire-and-forget: the append starts
-    // now and settles on its own, and a logging failure is swallowed — it
-    // can never delay or break the answer. The logId is a per-question
-    // record key (not a visitor identifier); the optional satisfaction
-    // thumbs use it to attach to this question's record.
+    // identity of any kind is recorded. The append's promise is handed to
+    // waitUntil: the answer returns immediately, the host keeps the
+    // function alive until the append settles, and a logging failure is
+    // swallowed — it can never delay or break the answer. (A bare
+    // fire-and-forget append was silently frozen by the host after the
+    // response in production; waitUntil is the fix, Nov 4, 2026.) The
+    // logId is a per-question record key (not a visitor identifier); the
+    // optional satisfaction thumbs use it to attach to this question's
+    // record.
     const logId = randomUUID();
+    const pendingLog = logQuestion([
+      new Date().toISOString(),
+      logId,
+      situation,
+      search.conceptsOf(situation).map((c) => c.stem).join(", "),
+      (answer.meta && answer.meta.topics ? answer.meta.topics : []).join("; "),
+      (answer.meta && answer.meta.leadRef) || "",
+      String(level),
+      categoryOf(situation),
+    ]);
     try {
-      logQuestion([
-        new Date().toISOString(),
-        logId,
-        situation,
-        search.conceptsOf(situation).map((c) => c.stem).join(", "),
-        (answer.meta && answer.meta.topics ? answer.meta.topics : []).join("; "),
-        (answer.meta && answer.meta.leadRef) || "",
-        String(level),
-        categoryOf(situation),
-      ]);
-    } catch { /* logging must never break an answer */ }
+      waitUntil(pendingLog);
+    } catch { /* non-Vercel run: the append still proceeds on its own */ }
     return res.status(200).json({ guidance: answer.guidance, passages: answer.passages, logId });
   } catch (error) {
     console.error(error);

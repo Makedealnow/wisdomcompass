@@ -6,6 +6,7 @@
 // record that carries the text. With the question log unconfigured this
 // endpoint accepts and quietly discards, so the thumbs never error.
 import { logFeedback } from "../lib/sheetlog.js";
+import { waitUntil } from "@vercel/functions";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -18,10 +19,14 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Invalid feedback." });
   }
   const hoping = String(req.body?.hoping || "").trim().slice(0, 1000);
+  // Same waitUntil pattern as the question log: the response returns at
+  // once, the host keeps the function alive until the append settles, and
+  // a logging failure never surfaces to the visitor.
+  const pendingLog = logFeedback([new Date().toISOString(), logId, helpful ? "yes" : "no", hoping]);
   try {
-    logFeedback([new Date().toISOString(), logId, helpful ? "yes" : "no", hoping]);
+    waitUntil(pendingLog);
   } catch {
-    /* feedback must never surface an error to the visitor */
+    /* non-Vercel run: the append still proceeds on its own */
   }
   return res.status(200).json({ ok: true });
 }
