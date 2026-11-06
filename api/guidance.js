@@ -22,17 +22,28 @@ import { waitUntil } from "@vercel/functions";
 
 function stem(w) {
   w = w.replace(/'s$/, "").replace(/'$/, "");
-  if (w.length > 4 && w.endsWith("ies")) return w.slice(0, -3) + "y";
-  if (w.length > 5 && w.endsWith("ing")) return w.slice(0, -3);
-  if (w.length > 4 && w.endsWith("ed")) return w.slice(0, -2);
-  if (w.length > 4 && w.endsWith("es")) return w.slice(0, -2);
-  if (w.length > 3 && w.endsWith("s")) return w.slice(0, -1);
-  return w;
+  let s = w;
+  if (s.length > 4 && s.endsWith("ies")) s = s.slice(0, -3) + "y";
+  else if (s.length > 5 && s.endsWith("ing")) s = s.slice(0, -3);
+  else if (s.length > 4 && s.endsWith("ed")) s = s.slice(0, -2);
+  else if (s.length > 4 && s.endsWith("es")) s = s.slice(0, -2);
+  else if (s.length > 3 && s.endsWith("s")) s = s.slice(0, -1);
+  // Word-family unifications (Nov 5, 2026 fix pass): a heading and the
+  // question word for it must stem identically or the heading can never
+  // match exactly — "forgiveness" stemmed to "forgivenes" while "forgive"
+  // stayed "forgive", which hid the whole Forgiveness heading (all three
+  // classic texts) from forgiveness questions. Same split for
+  // grief/grieving and anxious/anxiety.
+  if (s.startsWith("forgiv")) return "forgiv";
+  if (s.startsWith("griev") || s.startsWith("grief")) return "griev";
+  if (s.startsWith("anxi")) return "anxiety";
+  return s;
 }
 const QUESTION_STOP = new Set(("should would could shall will what when where which who whom whose why how is are was were be been being " +
   "do does did done i me my we our you your he she it its they them their the a an and or but if then than to of in on at for with by from about into " +
   "not no bible scripture scriptures verse verses say says said tell tells god lord jesus christ let get stop being go going want wants need needs " +
-  "make makes keep keeps help please really just can may might must am an's declare christian christians acceptable think thinks know all that thinking every month months week weeks ago day days").split(" "));
+  "make makes keep keeps help please really just can may might must am an's declare christian christians acceptable think thinks know all that thinking every month months week weeks ago day days " +
+  "i'm can't don't time lately huge").split(" "));
 const SYNONYMS = {
   bankruptcy: ["debt", "debtor", "surety", "borrow", "insolvent"],
   bankrupt: ["debt", "debtor"],
@@ -59,7 +70,7 @@ const SYNONYMS = {
   marri: ["marriage"],
   cry: ["weeping", "wept", "mourning", "sorrow", "comfort", "tears"],
   died: ["death", "mourning"],
-  anxiou: ["anxiety", "care", "fear"],
+  anxiety: ["care", "fear"],
   worry: ["anxiety", "care"],
   worri: ["anxiety", "care"],
   sunday: ["sabbath"],
@@ -71,7 +82,59 @@ const SYNONYMS = {
   gossip: ["talebearer", "slander"],
   homeschool: ["education", "instruction", "teach", "train"],
   burn: ["weary", "rest"],
+  // Nov 5, 2026 fix pass — pastoral-vocabulary bridges the audit found
+  // missing (keys are stems, as above):
+  griev: ["mourning", "sorrow", "comfort", "tears"],
+  decide: ["counsel", "wisdom", "seek"],
+  decision: ["counsel", "wisdom", "seek"],
+  exhaust: ["weary", "rest"],
+  honesty: ["truth", "integrity"],
 };
+// Phrase-level bridges (Nov 5, 2026 fix pass): some needs are carried by a
+// phrase, not a word — "far from God" leaves only the junk concepts
+// feel/far once "god" is stop-worded, and "should I buy…" is a counsel
+// question wearing an object word ("boat" -> the Ship heading). A matched
+// rule injects concepts in conceptsOf and, in the search, inserts its
+// topics alongside the scored ones and boosts its curated references.
+const PHRASE_RULES = [
+  {
+    re: /\bfar from god\b|\bfeel(?:ing)?\s+(?:so\s+)?(?:far|distant)\b|\bdistant from god\b|\bgod feels (?:far|distant|silent)\b/,
+    concepts: ["presence", "seek", "return", "draw", "near"],
+    topics: ["Hope"],
+    boostRefs: { "Psalm 42:11": 6, "Isaiah 41:10": 6, "Deuteronomy 31:8": 4 },
+  },
+  {
+    re: /\bshould i (?:buy|purchase|get)\b|\bis it (?:ok|okay|right|wise) to buy\b/,
+    concepts: ["counsel", "cost"],
+    topics: ["Counsel", "Frugality"],
+    boostRefs: { "Luke 14:28": 6 },
+  },
+  {
+    re: /\bcan'?t (?:sleep|fall asleep)\b|\bcannot sleep\b|\bsleepless\b/,
+    concepts: ["sleep", "rest"],
+    topics: ["Sleep"],
+    boostRefs: {},
+  },
+];
+function matchedPhraseRules(question) {
+  const q = String(question || "").toLowerCase();
+  return PHRASE_RULES.filter((r) => r.re.test(q));
+}
+// The entry index was built with the pre-unification stemmer, so a unified
+// stem's entry hits live under the old key (Nov 5, 2026 fix pass).
+const ENTRY_INDEX_ALIASES = { forgiv: ["forgivenes"] };
+
+// The curated comfort set for crisis answers (P0, Nov 5, 2026 fix pass).
+// Every reference was verified against the site's own kjv.json before use.
+const COMFORT_REFS = ["Psalm 34:18", "Psalm 42:11", "Deuteronomy 31:8", "Matthew 11:28-30", "Romans 8:38-39"];
+// Crisis phrasing — self-harm ideation as people actually type it. The
+// stock SENSITIVE_RE catches "suicid…"/"self-harm"; these phrases are the
+// gap the audit found ("I feel like giving up on life" matched nothing).
+const CRISIS_RE = /\b(suicid\w*|self-harm|giving up|give up on life|end my life|hurt myself|can't go on|no reason to live|tired of living)\b/;
+function isCrisis(question) {
+  return CRISIS_RE.test(String(question || "").toLowerCase());
+}
+
 function conceptsOf(question) {
   const raw = String(question || "").toLowerCase().match(/[a-z0-9']+/g) || [];
   const seen = new Set();
@@ -80,11 +143,21 @@ function conceptsOf(question) {
     if (tok.length < 3 || QUESTION_STOP.has(tok)) continue;
     const s = stem(tok);
     if (s.length < 3 || seen.has(s)) continue;
+    // A stem that collapsed to <=3 chars by truncating a longer word
+    // (this->thi, facing->fac, giving->giv, caring->car) is noise, not a
+    // concept — "car" alone pulled Matthew 13:22 into a parents answer.
+    if (s.length <= 3 && s !== tok) continue;
     seen.add(s);
     concepts.push({ stem: s, word: tok, direct: true });
     for (const syn of SYNONYMS[s] || []) {
       const ss = stem(syn);
       if (!seen.has(ss)) { seen.add(ss); concepts.push({ stem: ss, word: syn, direct: false }); }
+    }
+  }
+  for (const rule of matchedPhraseRules(question)) {
+    for (const w of rule.concepts) {
+      const ss = stem(w);
+      if (!seen.has(ss)) { seen.add(ss); concepts.push({ stem: ss, word: w, direct: false }); }
     }
   }
   return concepts;
@@ -113,8 +186,27 @@ function displayTopicName(name) {
 // Curated bridges across gaps in Nave's see-also graph. Nave's files the
 // Bible's debt-release teaching under "Sabbatic Year" (and its "Release"
 // heading is an empty shell with no references), so Debt is bridged to the
-// heading that actually carries Deuteronomy 15.
-const TOPIC_BRIDGES = { "Debt": ["Sabbatic Year"] };
+// heading that actually carries Deuteronomy 15. Nov 5, 2026 fix pass:
+// Borrowing carries Proverbs 22:7 + Psalm 37:21 (Debt itself carries
+// Romans 13:8); Grief's own refs are about grieving God, so it bridges to
+// Mourning; "Decision" is a 233-ref perseverance bucket while the counsel
+// texts sit in the 12-ref "Counsel" heading; Anxiety is an empty shell
+// whose swap target (Care) carries Matthew 6 + Philippians 4, and Peace
+// carries the peace-of-God texts; Marriage's husband/wife teaching sits
+// under the "Husband"/"Wife" headings (Ephesians 5:25, 1 Peter 3:7).
+const TOPIC_BRIDGES = {
+  "Debt": ["Borrowing", "Sabbatic Year"],
+  "Grief": ["Mourning"],
+  "Decision": ["Counsel"],
+  "Anxiety": ["Peace", "Care"],
+  "Rest": ["Sabbath"],
+  "Marriage": ["Husband", "Wife"],
+};
+// Topic-name literal collisions (Nov 5, 2026 fix pass): the concept on the
+// right must not name-match the heading on the left — "burned out" matched
+// "Burning Bush" on the word "burn" and put Exodus 3 in a rest answer.
+// (A question actually about the burning bush still matches via "bush".)
+const NAME_MATCH_BLOCK = { "Burning Bush": new Set(["burn"]) };
 
 let SEARCH = null;
 function loadSearch() {
@@ -130,6 +222,53 @@ function loadSearch() {
     return new Set(words.map(stem).filter((w) => w.length >= 3 && !["the", "of", "and"].includes(w)));
   });
   const topicByName = new Map(topicsData.topics.map((n, i) => [n, i]));
+
+  // Curated reference supplements (Nov 5, 2026 fix pass). The audit found
+  // the classic teaching texts for several pastoral topics are simply not
+  // in Nave's lists at all (James 1:19, Proverbs 15:1, Ephesians 4:32,
+  // Colossians 3:13, Mark 2:27, Mark 10:9, Psalm 34:18, Matthew 5:4,
+  // Revelation 21:4, John 11:35, Psalm 42:11, Isaiah 41:10,
+  // Deuteronomy 31:8, Romans 15:13, John 14:27, Isaiah 26:3 are covered by
+  // no Nave's reference) or sit hundreds of entries deep in a neighbouring
+  // heading (1 Timothy 5:8 at position 228 of "Children"). These are
+  // prepended to the heading that should carry them, in memory only — the
+  // data files are untouched. Every reference was verified against
+  // kjv.json before being added.
+  const CURATED_TOPIC_REFS = {
+    "Comfort": ["Psalm 34:18", "Psalm 42:11", "Deuteronomy 31:8", "Matthew 11:28-30", "Romans 8:38-39"],
+    "Mourning": ["Psalm 34:18", "Matthew 5:4", "Revelation 21:4", "John 11:35"],
+    "Peace": ["John 14:27", "Isaiah 26:3", "Philippians 4:7"],
+    "Hope": ["Psalm 42:11", "Isaiah 41:10", "Deuteronomy 31:8", "Romans 15:13"],
+    "Rest": ["Matthew 11:28-30", "Exodus 18:11-23"],
+    "Counsel": ["Proverbs 3:5-6", "James 1:5", "Luke 14:28"],
+    "Anger": ["James 1:19-20", "Ephesians 4:26", "Proverbs 15:1"],
+    "Parents": ["1 Timothy 5:8", "Exodus 20:12"],
+    "Sabbath": ["Mark 2:27", "Exodus 20:8-11"],
+    "Lending": ["Psalm 37:26"],
+    "Forgiveness": ["Ephesians 4:32", "Colossians 3:13"],
+    "Marriage": ["Mark 10:9", "Ephesians 5:25", "1 Peter 3:7"],
+    "Debt": ["Romans 13:8", "Proverbs 22:7", "Psalm 37:21"],
+    "Honesty": ["Proverbs 11:1", "Proverbs 12:22"],
+    "Care": ["Matthew 6:25-34", "Philippians 4:6", "Philippians 4:7", "Psalm 55:22", "1 Peter 5:7"],
+    "Prodigal Son": ["Luke 15:11-32"],
+  };
+  const curatedByTopic = new Map(Object.entries(CURATED_TOPIC_REFS).map(([n, rs]) => [n, new Set(rs)]));
+  const refIndexByRef = new Map(topicsData.refs.map((r, i) => [r, i]));
+  for (const [name, extraRefs] of Object.entries(CURATED_TOPIC_REFS)) {
+    const ti = topicByName.get(name);
+    if (ti === undefined) continue;
+    const add = [];
+    for (const ref of extraRefs) {
+      let ri = refIndexByRef.get(ref);
+      if (ri === undefined) {
+        ri = topicsData.refs.length;
+        topicsData.refs.push(ref);
+        refIndexByRef.set(ref, ri);
+      }
+      if (!add.includes(ri)) add.push(ri);
+    }
+    if (add.length) topicsData.byTopic[ti] = [...add, ...topicsData.byTopic[ti].filter((ri) => !add.includes(ri))];
+  }
 
   const verseKeys = Object.keys(kjv);
   const ordinal = new Map(verseKeys.map((k, i) => [k, i]));
@@ -172,16 +311,24 @@ function loadSearch() {
 
   // Passage text in the page library's own format (verse number + text, one
   // verse per line) for the passage panel.
-  function panelPassageText(ref) {
-    const { verses, truncated } = expandRef(ref);
+  function panelPassageText(ref, lead = false) {
+    const { verses, truncated } = expandRef(ref, 40);
     if (!verses.length) return null;
-    const text = verses.map((v) => `${parsedVerse[ordinal.get(v)].v} ${kjv[v]}`).join("\n");
-    return truncated ? text + " …" : text;
+    const fmt = (arr) => arr.map((v) => `${parsedVerse[ordinal.get(v)].v} ${kjv[v]}`).join("\n");
+    // Long ranges show head + closing verses, same as the answer body;
+    // the lead passage of a long range gets a wider head (Nov 5, 2026
+    // fix pass).
+    if (verses.length > 8) {
+      const headN = lead && verses.length > 15 ? 12 : 5;
+      return fmt(verses.slice(0, headN)) + "\n…\n" + fmt(verses.slice(-3));
+    }
+    return truncated ? fmt(verses) + " …" : fmt(verses);
   }
 
   function searchAnswer(question, opts = {}) {
     const concepts = opts.concepts || conceptsOf(question);
     let topTopics = null;
+    let nameDirectCount = new Map(); // filled by the topic-scoring pass below
     if (opts.forceTopic) {
       // Forced-topic pass (the WISDOM last resort): the named topic carries
       // the answer on its own; no concept scoring and no full-text scan.
@@ -195,9 +342,10 @@ function loadSearch() {
       const eiHits = new Map(); // entry-index points are capped per topic (below)
       for (const c of concepts) {
         const namePts = c.direct ? 12 : 9, entryPts = c.direct ? 4 : 3;
-        topicsData.topics.forEach((_, ti) => {
+        topicsData.topics.forEach((tname, ti) => {
+          if (NAME_MATCH_BLOCK[tname] && NAME_MATCH_BLOCK[tname].has(c.stem)) return;
           const words = topicNameWords[ti];
-          if (words.has(c.stem)) { addScore(ti, namePts); nameExact.add(ti); }
+          if (words.has(c.stem)) { addScore(ti, namePts); nameExact.add(ti); if (c.direct) nameDirectCount.set(ti, (nameDirectCount.get(ti) || 0) + 1); }
           else if (c.stem.length >= 5) {
             for (const w of words) if (w.startsWith(c.stem) || c.stem.startsWith(w)) { addScore(ti, namePts - 4); break; }
           }
@@ -206,10 +354,21 @@ function loadSearch() {
         // topics (Jesus, Paul) are mentioned under hundreds of words.
         // Capped at two concepts per topic so sheer size can't stack its
         // way onto the podium.
-        for (const ti of entryIndex[c.stem] || []) {
-          const n = eiHits.get(ti) || 0;
-          if (n < 2) { addScore(ti, entryPts); eiHits.set(ti, n + 1); }
+        const eiKeys = ENTRY_INDEX_ALIASES[c.stem] ? [c.stem, ...ENTRY_INDEX_ALIASES[c.stem]] : [c.stem];
+        for (const eiKey of eiKeys) {
+          for (const ti of entryIndex[eiKey] || []) {
+            if (NAME_MATCH_BLOCK[topicsData.topics[ti]] && NAME_MATCH_BLOCK[topicsData.topics[ti]].has(c.stem)) continue;
+            const n = eiHits.get(ti) || 0;
+            if (n < 2) { addScore(ti, entryPts); eiHits.set(ti, n + 1); }
+          }
         }
+      }
+      // "Decision, Valley of" is Joel 3 eschatology, not counsel for a
+      // personal decision — keep it out unless the question is actually
+      // about the valley (Nov 5, 2026 fix pass).
+      if (!concepts.some((c) => c.stem === "valley")) {
+        const vi = topicByName.get("Decision, Valley of");
+        if (vi !== undefined) topicScore.delete(vi);
       }
       let rankedTopics = [...topicScore.entries()].sort((a, b) => b[1] - a[1]);
       // seeAlso reinforcement from the top two topics
@@ -238,20 +397,46 @@ function loadSearch() {
         }
       }
       topTopics = resolvedPool.slice(0, 3);
-      // One extra slot at most: a topic the question matches by exact name
-      // shouldn't be cut just for landing fourth or fifth — prefer an
-      // exact-name match (e.g. "Surety (Guarantee)" via a synonym) over a
-      // merely high score.
+      // Curated topic bridges run BEFORE the extra-slot fill (Nov 5, 2026
+      // fix pass): the fill used to starve them - on the anxiety question
+      // the slots filled with Rest/Sleep before the Anxiety -> Care
+      // bridge could run, so Care's Matthew 6 / Philippians 4 texts never
+      // became candidates at all. Sources are the chosen topics PLUS the
+      // pre-resolution pool, so a bridge still fires when its source
+      // heading was an empty shell swapped out during resolution
+      // (Anxiety swaps to Care, leaving "Anxiety" out of topTopics - its
+      // Peace bridge must still run).
+      const bridgeSources = new Set(topTopics.map(([ti]) => topicsData.topics[ti]));
+      for (const [ti] of pool) bridgeSources.add(topicsData.topics[ti]);
+      for (const srcName of bridgeSources) {
+        for (const target of TOPIC_BRIDGES[srcName] || []) {
+          const bi = topicByName.get(target);
+          if (bi !== undefined && !topTopics.some(([t]) => t === bi) && topTopics.length < 5) topTopics.push([bi, 0]);
+        }
+      }
+      // Extra slots: a topic the question matches by exact name shouldn't
+      // be crowded out by entry-index giants - fill up to five slots with
+      // exact-name matches that scored as strong ("Honesty" itself landed
+      // fifth behind Boss/Rulers/Works on an honesty question, so its own
+      // classic texts never competed).
+      for (const [ti, s] of resolvedPool.slice(3)) {
+        if (topTopics.length >= 5) break;
+        if (nameExact.has(ti) && s >= 9 && !topTopics.some(([t]) => t === ti)) topTopics.push([ti, s]);
+      }
       if (topTopics.length < 4) {
-        const extra = resolvedPool.slice(3, 5);
-        const pick = extra.find(([ti, s]) => nameExact.has(ti) && s >= 9) || extra.find(([, s]) => s >= 12);
+        const pick = resolvedPool.slice(3).find(([ti, s]) => !topTopics.some(([t]) => t === ti) && s >= 12);
         if (pick) topTopics.push(pick);
       }
-      // curated topic bridges (see TOPIC_BRIDGES note above)
-      for (const [ti] of [...topTopics]) {
-        for (const target of TOPIC_BRIDGES[topicsData.topics[ti]] || []) {
+      // Phrase-rule topic insertions (see PHRASE_RULES note above): the
+      // phrase, not any single word, carries the need.
+      for (const rule of matchedPhraseRules(question)) {
+        for (const target of rule.topics) {
           const bi = topicByName.get(target);
-          if (bi !== undefined && !topTopics.some(([t]) => t === bi) && topTopics.length < 4) topTopics.push([bi, 0]);
+          if (bi === undefined || topTopics.some(([t]) => t === bi)) continue;
+          if (topTopics.length < 5) { topTopics.push([bi, 0]); continue; }
+          for (let i = topTopics.length - 1; i >= 0; i--) {
+            if (!nameExact.has(topTopics[i][0])) { topTopics[i] = [bi, 0]; break; }
+          }
         }
       }
     }
@@ -275,7 +460,7 @@ function loadSearch() {
     // candidate references with combined scores
     const cand = new Map();
     const addCand = (ref, pts) => cand.set(ref, (cand.get(ref) || 0) + pts);
-    const topicWeight = [10, 7, 5, 5];
+    const topicWeight = [10, 7, 5, 5, 4];
     // A topic reference also earns points for matching the question's own
     // concepts in its passage text — this is what lifts the verses that
     // actually speak to the question (Matthew 22:21 for taxes) above a big
@@ -297,15 +482,32 @@ function loadSearch() {
     // outscore the passages the question is actually about.
     const topicPts = new Map();
     topTopics.forEach(([ti], r) => {
+      const curated = curatedByTopic.get(topicsData.topics[ti]);
+      const nameBonus = 3 * (nameDirectCount.get(ti) || 0);
       for (const ri of topicsData.byTopic[ti].slice(0, 120)) {
         const ref = topicsData.refs[ri];
         let e = topicPts.get(ref);
         if (!e) { e = { weights: [], bonus: textBonus(ref) }; topicPts.set(ref, e); }
-        e.weights.push(topicWeight[r]);
+        // Curated flagship references (see CURATED_TOPIC_REFS) carry the
+        // top topic weight plus a flat bonus wherever their heading sits:
+        // they are the heading's defining teaching texts, hand-verified,
+        // and a heading buried at a low weight by entry-index noise
+        // should not sink them (Nov 5, 2026 fix pass).
+        if (curated && curated.has(ref)) {
+          e.weights.push(10);
+          if (!e.curated) { e.curated = true; e.bonus += 8; }
+        } else {
+          e.weights.push(topicWeight[r]);
+        }
+        // A heading the question names in its own words (Prodigal Son,
+        // Debt, Honesty) gets a per-name lift for its references.
+        if (!e.nameCounted) { e.nameCounted = true; e.bonus += nameBonus; }
       }
     });
     for (const [ref, e] of topicPts) addCand(ref, Math.max(...e.weights) + 2 * (e.weights.length - 1) + e.bonus);
     for (const [vi, sc] of topVerses) addCand(verseKeys[vi], Math.min(4 + 2 * sc.distinct, 12));
+    const ftHitStems = new Map();
+    for (const [vi, sc] of topVerses) ftHitStems.set(verseKeys[vi], sc.stems);
 
     // comparison step: cross-reference reinforcement (TSK) among candidates.
     // Ranges count whole: every verse a candidate covers is indexed, and a
@@ -323,7 +525,8 @@ function loadSearch() {
         verseCoveredBy.get(v).add(ref);
       }
     }
-    for (const ref of [...cand.keys()]) {
+    const connectedOut = new Map();
+    for (const ref of cand.keys()) {
       const connected = new Set();
       // Connections are read from the records of the passage's first three
       // verses — its head is its identity. (Reading a whole chapter's
@@ -336,7 +539,47 @@ function loadSearch() {
           if (owners) for (const o of owners) if (o !== ref) connected.add(o);
         }
       }
-      if (connected.size) cand.set(ref, cand.get(ref) + Math.min(connected.size, 4));
+      connectedOut.set(ref, connected);
+    }
+    // Reinforcement runs both ways (Nov 5, 2026 fix pass): a candidate
+    // also earns credit for being pointed TO by other candidates
+    // (in-degree). Without it, a heading's most-cross-referenced teaching
+    // texts sat mid-list behind verses that merely mention the concept
+    // word.
+    const inDegree = new Map();
+    for (const connected of connectedOut.values()) {
+      for (const o of connected) inDegree.set(o, (inDegree.get(o) || 0) + 1);
+    }
+    for (const [ref, connected] of connectedOut) {
+      const bonus = Math.min(connected.size, 4) + Math.min(inDegree.get(ref) || 0, 3);
+      if (bonus) cand.set(ref, cand.get(ref) + bonus);
+    }
+    // Phrase-rule reference boosts (Nov 5, 2026 fix pass).
+    for (const rule of matchedPhraseRules(question)) {
+      for (const [ref, pts] of Object.entries(rule.boostRefs)) {
+        if (cand.has(ref)) cand.set(ref, cand.get(ref) + pts);
+      }
+    }
+    // When the question is about anxiety or worry, demote reverence-fear
+    // texts - "fear the LORD" is worship vocabulary, not the feeling the
+    // visitor brought (Nov 5, 2026 fix pass).
+    if (concepts.some((c) => c.stem === "anxiety" || c.stem === "worri" || c.stem === "worry")) {
+      for (const ref of cand.keys()) {
+        const head = (candVerses.get(ref) || []).slice(0, 3).join(" ").toLowerCase();
+        if (/fear (me|the lord|him|thee|god)\b/.test(head) || head.includes("learn to fear")) {
+          cand.set(ref, cand.get(ref) - 12);
+        }
+      }
+    }
+    // Marriage questions carrying save/struggle/restore intent: demote
+    // the divorce-law references below the covenant teaching - they answer
+    // a different question than the one asked (Nov 5, 2026 fix pass).
+    const qLower = String(question || "").toLowerCase();
+    if (concepts.some((c) => c.stem === "marriage") && /\b(sav\w*|struggl\w*|restor\w*|fix\w*|troubl\w*|repair\w*|falling apart|heal\w*)\b/.test(qLower)) {
+      const DIVORCE_LAW = ["Matthew 5:31", "Matthew 5:32", "Matthew 19:9", "Mark 10:11", "Mark 10:12", "Luke 16:18", "Deuteronomy 24:1", "Matthew 22:30", "Mark 12:25", "Luke 20:35"];
+      for (const ref of cand.keys()) {
+        if (DIVORCE_LAW.some((d) => ref === d || ref.startsWith(d + "-"))) cand.set(ref, cand.get(ref) - 9);
+      }
     }
     // Score ties break toward the more focused reference (a single verse
     // before a long range) and then by canonical order — pure canonical
@@ -359,6 +602,14 @@ function loadSearch() {
     // isn't another topic's sole representative.
     let rankedRefs = byScore.slice(0, 9);
     const protectedRefs = new Set();
+    // Curated flagship references that made the cut are protected from
+    // guarantee swaps (Nov 5, 2026 fix pass): Matthew 6:25-34 kept being
+    // evicted from the anxiety answer by weaker headings' guarantees.
+    for (const [ti] of topTopics) {
+      const curated = curatedByTopic.get(topicsData.topics[ti]);
+      if (!curated) continue;
+      for (const r of rankedRefs) if (curated.has(r)) protectedRefs.add(r);
+    }
     for (const [ti] of topTopics) {
       const trefs = new Set(topicsData.byTopic[ti].slice(0, 120).map((ri) => topicsData.refs[ri]));
       if (rankedRefs.some((r) => trefs.has(r))) {
@@ -368,27 +619,75 @@ function loadSearch() {
       const best = byScore.find((r) => trefs.has(r));
       if (!best) continue;
       for (let i = rankedRefs.length - 1; i >= 0; i--) {
-        if (!protectedRefs.has(rankedRefs[i])) { rankedRefs[i] = best; break; }
+        if (!protectedRefs.has(rankedRefs[i])) {
+          // Margin rule (Nov 5, 2026 fix pass): a topic whose best
+          // reference is far below the cut does not evict a much stronger
+          // passage - on the anxiety question this guarantee swapped out
+          // Matthew 6:25-34 and Philippians 4:6 (25 each) for the Fear
+          // and Joy headings' best (21).
+          if ((cand.get(rankedRefs[i]) || 0) - (cand.get(best) || 0) > 6) break;
+          rankedRefs[i] = best;
+          break;
+        }
       }
       protectedRefs.add(best);
     }
     rankedRefs = [...new Set(rankedRefs)].sort(byScoreCmp);
+    // Cap the slots any single concept's full-text scan can fill (Nov 5,
+    // 2026 fix pass): "silver" alone put six Genesis references from the
+    // scan across a debt answer's top nine, crowding out the debt
+    // headings' own texts. Topic-sourced references are exempt.
+    {
+      const stemCounts = new Map();
+      const kept = [];
+      for (const ref of rankedRefs) {
+        if (topicPts.has(ref)) { kept.push(ref); continue; }
+        const hits = ftHitStems.get(ref) || [];
+        if (hits.some((s) => (stemCounts.get(s) || 0) >= 3)) continue;
+        for (const s of hits) stemCounts.set(s, (stemCounts.get(s) || 0) + 1);
+        kept.push(ref);
+      }
+      rankedRefs = kept.slice(0, 9);
+    }
     if (!rankedRefs.length) return null;
+
+    // Crisis phrasing gets a care-first assembly (P0, Nov 5, 2026 fix
+    // pass): the curated comfort set leads, in its own order, ahead of
+    // whatever the search ranked, and the displayed topics reflect that.
+    const crisis = isCrisis(question);
+    let crisisTopics = null;
+    if (crisis) {
+      const comfort = COMFORT_REFS.filter((r) => expandRef(r).verses.length);
+      rankedRefs = [...comfort, ...rankedRefs.filter((r) => !comfort.includes(r))].slice(0, 9);
+      crisisTopics = ["Comfort", "Hope"];
+    }
 
     // assemble the answer in the site's established shape
     // De-inversion can make two distinct Nave's headings display identically
     // (e.g. "Bush, Burning" alongside a literal "Burning Bush") — show each
     // displayed name once.
-    const topicNames = [...new Set(topTopics.map(([ti]) => displayTopicName(topicsData.topics[ti])))];
+    const topicNames = crisisTopics || [...new Set(topTopics.map(([ti]) => displayTopicName(topicsData.topics[ti])))];
     const themesLine = topicNames.length ? topicNames.join("; ") : "searched across the whole Bible";
-    const passages = rankedRefs.slice(0, 3).map((ref) => {
-      const { verses, truncated } = expandRef(ref);
+    const passages = rankedRefs.slice(0, 3).map((ref, idx) => {
+      // Ranges longer than the display cap show head + closing verses
+      // (Nov 5, 2026 fix pass): the prodigal's homecoming (Luke 15:20-24)
+      // sat past the old 8-verse cut. The lead passage of a long range
+      // gets a wider head (12 verses), enough to reach the homecoming.
+      // Both segments are verbatim KJV.
+      const { verses, truncated } = expandRef(ref, 40);
+      if (!verses.length) return { ref, text: "" };
+      if (verses.length > 8) {
+        const headN = idx === 0 && verses.length > 15 ? 12 : 5;
+        const head = verses.slice(0, headN).map((v) => kjv[v]).join(" ");
+        const tail = verses.slice(-3).map((v) => kjv[v]).join(" ");
+        return { ref, text: head + " … " + tail };
+      }
       const text = verses.map((v) => kjv[v]).join(" ");
       return { ref, text: text + (truncated ? " …" : "") };
     });
     const panelPassages = {};
     for (const p of passages) {
-      const t = panelPassageText(p.ref);
+      const t = panelPassageText(p.ref, p.ref === rankedRefs[0]);
       if (t) panelPassages[p.ref] = { title: `${p.ref} — King James Version`, text: t };
     }
     const [firstRef, secondRef] = rankedRefs;
@@ -402,6 +701,17 @@ function loadSearch() {
       `What do these passages show God commending, and what do they show him warning against?`,
       `If I took the plain teaching of ${firstRef} seriously, what would I do differently this week?`,
     ];
+    if (crisis) {
+      // The "what would I do differently this week" reflection is the
+      // wrong shape for a crisis answer (P0, Nov 5, 2026 fix pass).
+      questions[2] = "Who is one person who cares about you that you can tell honestly how you are feeling today?";
+    }
+    const plainGuidance = crisis
+      ? `You do not have to carry this alone, and what you are feeling matters. If you might act on thoughts of harming yourself, please call or text 988 right now - the Suicide and Crisis Lifeline (US) is free, confidential, and answered around the clock by people who will listen. If you are in immediate danger, call 911. Then reach out today to one person who cares about you - a family member, a friend, a pastor, or a counselor - and tell them honestly how you are feeling. The passages above are God's own words for a broken heart: he is near to you, he will never leave you, and nothing can separate you from his love.`
+      : `Search the Scriptures above before deciding. Notice the repeated biblical themes: ${topicNames.map((t) => t.toLowerCase()).join(", ")}. Do not treat one verse as a shortcut; compare the whole counsel of Scripture, seek wise counsel, and consider the fruit of each possible path.`;
+    const nextStep = crisis
+      ? `Read the passages above slowly - start with ${firstRef} - and let them say what they say: God is near, and he has not let go of you. Then make the call or send the message to the person you named above, today.`
+      : `Read the passages above in full - start with ${firstRef}${secondRef ? ` and ${secondRef}` : ""} - and pray through them before you decide. Then talk the decision over with a trusted believer who knows your situation, and take the step that best matches the pattern of Scripture you found.`;
     const guidance =
       `Situation:\n${question}\n\n` +
       `Biblical Topics Found:\n${themesLine}\n\n` +
@@ -410,8 +720,8 @@ function loadSearch() {
       `Additional Biblical Connections:\n${passages.slice(1).map((p) => `${p.ref}\n${p.text}`).join("\n\n")}\n\n` +
       `King James Version Scripture References:\n${rankedRefs.join("; ")}\n\n` +
       `Reflection Questions:\n${questions.map((q) => "- " + q).join("\n")}\n\n` +
-      `Plain-Language Guidance:\nSearch the Scriptures above before deciding. Notice the repeated biblical themes: ${topicNames.map((t) => t.toLowerCase()).join(", ")}. Do not treat one verse as a shortcut; compare the whole counsel of Scripture, seek wise counsel, and consider the fruit of each possible path.\n\n` +
-      `Next Wise Step:\nRead the passages above in full — start with ${firstRef}${secondRef ? ` and ${secondRef}` : ""} — and pray through them before you decide. Then talk the decision over with a trusted believer who knows your situation, and take the step that best matches the pattern of Scripture you found.\n\n` +
+      `Plain-Language Guidance:\n${plainGuidance}\n\n` +
+      `Next Wise Step:\n${nextStep}\n\n` +
       `Disclaimer:\nWisdomCompass provides spiritual and biblical guidance only. It is not legal, medical, mental health, financial, or emergency advice. For urgent danger, abuse, self-harm, or emergency situations, contact emergency services, a qualified professional, or trusted local help immediately.`;
     return { guidance, passages: panelPassages, meta: { topics: topicNames, leadRef: rankedRefs[0] || null } };
   }
@@ -475,7 +785,7 @@ const CATEGORY_RULES = [
   ["Health", /\b(health|sick\w*|illness|doctor|pain|cancer|disease|anxiet\w*|anxious|depress\w*|sleep|weight|diet|medical|hospital|surgery|diagnos\w*)\b/],
   ["Home", /\b(house|home|landlord|tenant|neighbor\w*|moving|apartment|property|renovat\w*)\b/],
 ];
-const SENSITIVE_RE = /\b(grief|grieving|died|death|funeral|abuse|abusive|suicid\w*|self-harm|crisis|miscarriage|widow\w*)\b/;
+const SENSITIVE_RE = /\b(grief|grieving|died|death|funeral|abuse|abusive|suicid\w*|self-harm|crisis|miscarriage|widow\w*|giving up|give up on life|end my life|hurt myself|can't go on|no reason to live|tired of living)\b/;
 function categoryOf(question) {
   const q = String(question || "").toLowerCase();
   let cat = "Other";
