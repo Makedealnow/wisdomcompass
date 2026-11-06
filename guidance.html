@@ -518,13 +518,12 @@ const COMMENTARY = {
   }
 };
 
+// Only hand-written (curated) entries are returned. There is deliberately
+// no generic fallback: a passage with no curated entry gets no
+// meaning/relation lines anywhere, rather than template filler written in
+// an internal voice ("the user") that visitors should never see.
 function commentaryForRef(ref) {
-  return COMMENTARY[ref] || {
-    url: "https://biblehub.com/commentaries/",
-    meaning: "Use the linked commentary and cross references to study the passage in context.",
-    concepts: ["context", "biblical meaning", "cross references", "wise application"],
-    relation: "Compare this passage with the user's situation carefully before applying it."
-  };
+  return COMMENTARY[ref] || null;
 }
 
 function passageApplication(ref) {
@@ -553,7 +552,8 @@ function bibleHubBookSlug(book) {
     "Luke": "luke",
     "Psalm": "psalms",
     "Romans": "romans",
-    "Galatians": "galatians"
+    "Galatians": "galatians",
+    "Song of Solomon": "songs"
   };
   return map[book] || book.toLowerCase().replace(/\s+/g, "_");
 }
@@ -565,11 +565,23 @@ function parsePassageStart(ref) {
 }
 
 function bibleHubUrl(ref, type) {
+  // BibleHub's cross-reference section is "crossref" (singular) — the
+  // plural form 404s for every reference — and its Song of Solomon slug
+  // is "songs" (see bibleHubBookSlug). Both verified live Nov 6, 2026.
+  const section = type === "crossrefs" ? "crossref" : "commentaries";
   const parsed = parsePassageStart(ref);
-  if (!parsed) return type === "crossrefs" ? "https://biblehub.com/crossrefs/" : "https://biblehub.com/commentaries/";
-  const slug = bibleHubBookSlug(parsed.book);
-  const section = type === "crossrefs" ? "crossrefs" : "commentaries";
-  return `https://biblehub.com/${section}/${slug}/${parsed.chapter}-${parsed.verse}.htm`;
+  if (parsed) {
+    const slug = bibleHubBookSlug(parsed.book);
+    return `https://biblehub.com/${section}/${slug}/${parsed.chapter}-${parsed.verse}.htm`;
+  }
+  // Chapter-only references ("Genesis 20") land on the chapter's first
+  // verse rather than a generic section page.
+  const chapterOnly = String(ref).match(/^((?:[1-3]\s+)?[A-Za-z]+(?:\s+[A-Za-z]+)*)\s+(\d+)\s*$/);
+  if (chapterOnly) {
+    const slug = bibleHubBookSlug(chapterOnly[1]);
+    return `https://biblehub.com/${section}/${slug}/${chapterOnly[2]}-1.htm`;
+  }
+  return `https://biblehub.com/${section}/`;
 }
 
 function studyLinksHTML(ref) {
@@ -592,14 +604,13 @@ function renderPassageBlock(ref, userText) {
   const passage = passageFor(ref);
   if (!passage) return "";
   const c = commentaryForRef(ref);
-  const conceptList = c.concepts.map(item => `<li>${escapeHTML(item)}</li>`).join("");
-  return `<h4>${escapeHTML(passage.title)}</h4>
-    <pre>${escapeHTML(passage.text)}</pre>
-    ${studyLinksHTML(ref)}
+  // Study notes exist only for passages with a curated commentary entry;
+  // without one the block is the passage text and study links alone.
+  const panel = c ? `
     <div class="commentary-panel simple-study-notes">
       <section class="study-note-block">
         <h5>Key Biblical Concepts</h5>
-        <ul>${conceptList}</ul>
+        <ul>${c.concepts.map(item => `<li>${escapeHTML(item)}</li>`).join("")}</ul>
       </section>
       <section class="study-note-block">
         <h5>Meaning of the Passage</h5>
@@ -609,7 +620,10 @@ function renderPassageBlock(ref, userText) {
         <h5>How This Passage Applies to Your Situation</h5>
         <p>${escapeHTML(passageApplication(ref))}</p>
       </section>
-    </div>`;
+    </div>` : "";
+  return `<h4>${escapeHTML(passage.title)}</h4>
+    <pre>${escapeHTML(passage.text)}</pre>
+    ${studyLinksHTML(ref)}${panel}`;
 }
 
 
@@ -709,25 +723,33 @@ function referencesForText(guidance, userText) {
 
 function oneSentencePassageRelation(ref) {
   const c = commentaryForRef(ref);
+  if (!c) return null;
   return `meaning: ${c.meaning} relation: ${c.relation}`;
 }
 
 function whatTheBibleSaysHTML(guidance, refs, userText) {
   // The summary is built from the API's answer itself — the topics the
   // search found for this question and the passages it returned — never
-  // from a locally picked guide.
+  // from a locally picked guide. Since Nov 6, 2026 it closes the card:
+  // the passages themselves come first (in the passage reader above),
+  // then how they connect, then this method note. Only passages with a
+  // curated commentary entry appear in the connections list — a passage
+  // without one is simply absent there, never filled with template text.
   const topicsSection = String(guidance || "").split("Biblical Topics Found:\n")[1];
   const topics = topicsSection ? topicsSection.split("\n\n")[0].replace(/\n/g, " ").trim() : "";
   const summary = topics
     ? `These passages were found by searching the whole Bible for your question. The topics the search found are: ${topics}. Read the passages together rather than relying on one isolated verse, pray for wisdom, and seek trusted counsel before acting.`
     : `These passages were found by searching the whole Bible for your question. Read them together rather than relying on one isolated verse, pray for wisdom, and seek trusted counsel before acting.`;
-  const bullets = refs.map(ref => `<li><strong>${escapeHTML(ref)}:</strong> ${escapeHTML(oneSentencePassageRelation(ref))}</li>`).join("");
-  return `<section class="bible-says-card">
-    <h3>What the Bible Says About Your Situation</h3>
-    <p>${escapeHTML(summary)}</p>
-    <h4>How the passages connect to your situation</h4>
-    <ul class="passage-relation-list">${bullets}</ul>
-  </section>`;
+  const bullets = refs.map(ref => {
+    const relation = oneSentencePassageRelation(ref);
+    return relation ? `<li><strong>${escapeHTML(ref)}:</strong> ${escapeHTML(relation)}</li>` : "";
+  }).join("");
+  const connections = bullets
+    ? `<h4>How the passages connect to your situation</h4>
+    <ul class="passage-relation-list">${bullets}</ul>`
+    : "";
+  return `${connections}
+    <p>${escapeHTML(summary)}</p>`;
 }
 
 function formatGuidance(guidance) {
@@ -772,17 +794,20 @@ function guidanceToHTML(guidance, userText) {
   const buttons = refs.map((ref, idx) => `<button type="button" class="passage-link ${idx === 0 ? "selected" : ""}" data-ref="${escapeHTML(ref)}">${escapeHTML(ref)}</button>`).join("");
   const bibleSays = whatTheBibleSaysHTML(guidance, refs, userText);
   const passageHTML = passage ? `
-    ${bibleSays}
-    <div class="passage-reader" id="passageReader">
-      <div class="passage-header">
-        <h3>Primary Bible Passage to Read First</h3>
-        <p class="microcopy">Click another reference below to display its full KJV passage and study notes here without leaving the page.</p>
+    <section class="bible-says-card">
+      <h3>What the Bible Says About Your Situation</h3>
+      <div class="passage-reader" id="passageReader">
+        <div class="passage-header">
+          <h3>Primary Bible Passage to Read First</h3>
+          <p class="microcopy">Click another reference below to display its full KJV passage and study notes here without leaving the page.</p>
+        </div>
+        <div class="passage-display" id="passageDisplay">
+          ${renderPassageBlock(firstRef, userText)}
+        </div>
+        <div class="passage-links" id="passageLinks">${buttons}</div>
       </div>
-      <div class="passage-display" id="passageDisplay">
-        ${renderPassageBlock(firstRef, userText)}
-      </div>
-      <div class="passage-links" id="passageLinks">${buttons}</div>
-    </div>` : "";
+      ${bibleSays}
+    </section>` : "";
   return `${passageHTML}<div class="guidance-text"><h3>Biblical Guidance</h3>${formatGuidance(guidance)}</div>`;
 }
 
