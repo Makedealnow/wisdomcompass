@@ -15,7 +15,7 @@
 <link rel="canonical" href="https://wisdomcompass.net/guidance">
 </head><body>
 <header class="site-header"><a class="logo" href="/">WisdomCompass</a><nav class="nav"><a href="/guidance">Decision Guidance</a><a href="/about">About</a><a href="/business-partners">Partners</a><a class="nav-cta" href="/guidance">Free Guidance</a></nav></header>
-<main><section class="tool-page"><section id="guidanceDisclaimer" class="panel disclaimer-gate"><p class="eyebrow">Before You Continue</p><h1>Informational Guidance Only</h1><p>WisdomCompass provides biblical, spiritual, educational, informational, and entertainment-style guidance only.</p><p>WisdomCompass is not legal, medical, mental health, financial, emergency, dietary, nutrition, or professional advice. You are responsible for your own decisions. For serious or urgent issues, contact a qualified professional or emergency services.</p><button class="button primary" id="agreeDisclaimerBtn">I Agree — Continue</button></section><section id="guidanceTool" class="guidance-tool-hidden"><section class="tool-intro"><p class="eyebrow">Decision Guidance Tool</p><h1>Think clearly before you choose.</h1><p>Describe the decision you are facing. WisdomCompass will help you organize the issue, ask better questions, and identify a wiser next step.</p></section><section class="tool-grid same-screen-grid"><div class="panel form-card"><label for="situation">What decision or situation are you facing?</label><textarea id="situation" spellcheck="true" lang="en" autocapitalize="sentences" placeholder="Example: I am trying to decide whether to change jobs, start a business partnership, make a major purchase, or handle a family conflict."></textarea><div class="button-row"><button class="button primary" id="generateBtn">Search Scripture</button><button class="button secondary" id="micBtn" type="button" style="display:none">&#127908; Speak</button><button class="button secondary" id="clearBtn">Clear</button></div><p class="microcopy">Tip: include the decision, the pressure, who is affected, and what outcome you are considering.</p></div><div class="panel result-panel"><h2>Your Guidance</h2><div id="result" class="result-box empty">Your biblical topic search and guidance will appear here on this same page.</div><button class="button secondary" id="saveBtn" disabled>Save to History</button></div></section><section class="panel history-panel"><div class="history-heading"><h2>Saved History</h2><button class="link-button" id="clearHistoryBtn">Clear History</button></div><div id="historyList"></div></section></section></section><script>
+<main><section class="tool-page"><section id="guidanceDisclaimer" class="panel disclaimer-gate"><p class="eyebrow">Before You Continue</p><h1>Informational Guidance Only</h1><p>WisdomCompass provides biblical, spiritual, educational, informational, and entertainment-style guidance only.</p><p>WisdomCompass is not legal, medical, mental health, financial, emergency, dietary, nutrition, or professional advice. You are responsible for your own decisions. For serious or urgent issues, contact a qualified professional or emergency services.</p><button class="button primary" id="agreeDisclaimerBtn">I Agree — Continue</button></section><section id="guidanceTool" class="guidance-tool-hidden"><section class="tool-intro"><p class="eyebrow">Decision Guidance Tool</p><h1>Think clearly before you choose.</h1><p>Describe the decision you are facing. WisdomCompass will help you organize the issue, ask better questions, and identify a wiser next step.</p></section><section class="tool-grid same-screen-grid"><div class="panel form-card"><label for="situation">What decision or situation are you facing?</label><textarea id="situation" spellcheck="true" lang="en" autocapitalize="sentences" placeholder="Example: I am trying to decide whether to change jobs, start a business partnership, make a major purchase, or handle a family conflict."></textarea><div class="button-row"><button class="button primary" id="generateBtn">Search Scripture</button><button class="button secondary" id="micBtn" type="button" style="display:none">&#127908; Speak</button><button class="button secondary" id="clearBtn">Clear</button></div><p class="microcopy">Tip: include the decision, the pressure, who is affected, and what outcome you are considering.</p></div><div class="panel result-panel"><h2>Your Guidance</h2><div id="result" class="result-box empty">Your biblical topic search and guidance will appear here on this same page.</div><div class="translation-toggle" role="group" aria-label="Bible translation"><span class="microcopy">Read the passages in:</span><button type="button" class="button secondary toggle-btn" data-translation="bsb">Berean (modern English)</button><button type="button" class="button secondary toggle-btn" data-translation="kjv">King James</button></div><button class="button secondary" id="saveBtn" disabled>Save to History</button></div></section><section class="panel history-panel"><div class="history-heading"><h2>Saved History</h2><button class="link-button" id="clearHistoryBtn">Clear History</button></div><div id="historyList"></div></section></section></section><script>
 const situationInput = document.getElementById("situation");
 const generateBtn = document.getElementById("generateBtn");
 const clearBtn = document.getElementById("clearBtn");
@@ -31,6 +31,11 @@ let latestGuidance = "";
 let latestRenderedText = "";
 let latestLogId = null;
 let apiPassages = {};
+// Bible translation choice (Nov 8, 2026): the Berean Standard Bible is
+// the default; the King James Version stays one tap away. The choice is
+// remembered on this device and sent with every search.
+let currentTranslation = "bsb";
+try { if (localStorage.getItem("wcTranslation") === "kjv") currentTranslation = "kjv"; } catch (e) {}
 
 const PASSAGES = {
   "Matthew 22:21": { title: "Matthew 22:21 — King James Version", text: `21 They say unto him, Caesar's. Then saith he unto them, Render therefore unto Caesar the things which are Caesar's; and unto God the things that are God's.` },
@@ -598,7 +603,11 @@ function studyLinksHTML(ref) {
 
 // Passages supplied by the API (whole-Bible search answers) supplement the
 // library embedded above; the local library wins when both have a reference.
-function passageFor(ref) { return PASSAGES[ref] || apiPassages[ref] || null; }
+function passageFor(ref) {
+  return currentTranslation === "kjv"
+    ? (PASSAGES[ref] || apiPassages[ref] || null)
+    : (apiPassages[ref] || PASSAGES[ref] || null);
+}
 
 function renderPassageBlock(ref, userText) {
   const passage = passageFor(ref);
@@ -687,7 +696,7 @@ async function getGuidance(text) {
   const response = await fetch("/api/guidance", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ situation: text })
+    body: JSON.stringify({ situation: text, translation: currentTranslation })
   });
   const data = await response.json();
   if (!response.ok || !data.guidance) throw new Error(data.error || "Unable to generate guidance.");
@@ -710,7 +719,7 @@ function referencesForText(guidance, userText) {
   // chooses or adds references.
   const found = [];
   const push = (ref) => { if (passageFor(ref) && !found.includes(ref)) found.push(ref); };
-  const section = guidance.split("King James Version Scripture References:\n")[1];
+  const section = guidance.split(/Scripture References:\n/)[1];
   if (section) {
     section.split("\n\n")[0].split(";").map(s => s.trim()).filter(Boolean).forEach(push);
   }
@@ -753,8 +762,8 @@ function whatTheBibleSaysHTML(guidance, refs, userText) {
 }
 
 function formatGuidance(guidance) {
-  const HEADERS = ["Situation", "Biblical Topics Found", "Biblical Principle", "Related Biblical Story / Passage", "Additional Biblical Connections", "King James Version Scripture References", "Reflection Questions", "Plain-Language Guidance", "Next Wise Step", "Disclaimer"];
-  const SKIP = { "Situation": 1, "King James Version Scripture References": 1 };
+  const HEADERS = ["Situation", "Biblical Topics Found", "Biblical Principle", "Related Biblical Story / Passage", "Additional Biblical Connections", "King James Version Scripture References", "Berean Standard Bible Scripture References", "Reflection Questions", "Plain-Language Guidance", "Next Wise Step", "Disclaimer"];
+  const SKIP = { "Situation": 1, "King James Version Scripture References": 1, "Berean Standard Bible Scripture References": 1 };
   const lines = String(guidance || "").split("\n");
   const sections = [];
   let cur = null;
@@ -799,7 +808,7 @@ function guidanceToHTML(guidance, userText) {
       <div class="passage-reader" id="passageReader">
         <div class="passage-header">
           <h3>Primary Bible Passage to Read First</h3>
-          <p class="microcopy">Click another reference below to display its full KJV passage and study notes here without leaving the page.</p>
+          <p class="microcopy">Click another reference below to display its full passage and study notes here without leaving the page.</p>
         </div>
         <div class="passage-display" id="passageDisplay">
           ${renderPassageBlock(firstRef, userText)}
@@ -898,6 +907,27 @@ function renderHistory() {
   });
 }
 
+function paintTranslationToggle() {
+  document.querySelectorAll(".translation-toggle .toggle-btn").forEach(btn => {
+    const active = btn.getAttribute("data-translation") === currentTranslation;
+    btn.classList.toggle("selected", active);
+    btn.setAttribute("aria-pressed", active ? "true" : "false");
+  });
+}
+document.querySelectorAll(".translation-toggle .toggle-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const choice = btn.getAttribute("data-translation");
+    if (choice === currentTranslation) return;
+    currentTranslation = choice;
+    try { localStorage.setItem("wcTranslation", choice); } catch (e) {}
+    paintTranslationToggle();
+    // Re-run the search for the question still in the box so the answer
+    // the visitor is reading switches text with one tap.
+    if (latestGuidance && situationInput && situationInput.value.trim() && generateBtn) generateBtn.click();
+  });
+});
+paintTranslationToggle();
+
 if (generateBtn) {
   generateBtn.addEventListener("click", async () => {
     const text = situationInput.value.trim();
@@ -959,5 +989,5 @@ if (clearHistoryBtn) { clearHistoryBtn.addEventListener("click", () => { setHist
 renderHistory();
 
 </script></main>
-<footer class="site-footer"><div><a class="logo" href="/">WisdomCompass</a><p>Decisions Matter</p><p class="tiny">Practical decision guidance rooted in timeless Biblical principles. KJV is displayed on-site; NIV and commentary links open external study resources. Not professional, legal, medical, financial, mental health, or emergency advice.</p></div><div class="footer-links"><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/disclaimer">Disclaimer</a></div></footer>
+<footer class="site-footer"><div><a class="logo" href="/">WisdomCompass</a><p>Decisions Matter</p><p class="tiny">Practical decision guidance rooted in timeless Biblical principles. Passages are shown in the Berean Standard Bible or the King James Version — your choice. NIV and commentary links open external study resources. Not professional, legal, medical, financial, mental health, or emergency advice.</p></div><div class="footer-links"><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/disclaimer">Disclaimer</a></div></footer>
 </body></html>

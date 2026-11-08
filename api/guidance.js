@@ -19,6 +19,21 @@ import { waitUntil } from "@vercel/functions";
 // in there by mistake"). Data lives in ../data/ (public-domain KJV text,
 // Nave's topics, TSK cross-references, and a concept index built from Nave's
 // entry text) and is loaded lazily on the first request.
+//
+// Nov 8, 2026 upgrade (Jeff approved): the default Bible text is now the
+// Berean Standard Bible (BSB — modern English, dedicated to the public
+// domain Apr 30, 2023; data/bsb.json, keyed exactly like kjv.json, with
+// the KJV text standing in for the 16 verse numbers the BSB leaves
+// blank). The full-text scan runs over the chosen translation's own
+// words, so modern questions meet modern vocabulary ("Be anxious for
+// nothing" — Philippians 4:6 in the BSB — is findable by the word
+// "anxious" itself). body.translation = "kjv" still serves the King
+// James text end to end. An optional Gemini composition layer (Jeff's
+// Nov 4 Phase B design; free tier only — this site carries no paid
+// services) may rewrite the principle / guidance / next-step prose
+// around the search's own passages when GEMINI_API_KEY is set; it is
+// fenced by validation and falls back to this template assembly on any
+// failure. Crisis answers never leave the site.
 
 function stem(w) {
   w = w.replace(/'s$/, "").replace(/'$/, "");
@@ -124,6 +139,10 @@ function matchedPhraseRules(question) {
 // stem's entry hits live under the old key (Nov 5, 2026 fix pass).
 const ENTRY_INDEX_ALIASES = { forgiv: ["forgivenes"] };
 
+// Whole short words a truncated stem may legitimately be (see the guard
+// in conceptsOf). Populated by loadSearch from the topic data itself.
+let SHORT_STEM_OK = null;
+
 // The curated comfort set for crisis answers (P0, Nov 5, 2026 fix pass).
 // Every reference was verified against the site's own kjv.json before use.
 const COMFORT_REFS = ["Psalm 34:18", "Psalm 42:11", "Deuteronomy 31:8", "Matthew 11:28-30", "Romans 8:38-39"];
@@ -146,7 +165,15 @@ function conceptsOf(question) {
     // A stem that collapsed to <=3 chars by truncating a longer word
     // (this->thi, facing->fac, giving->giv, caring->car) is noise, not a
     // concept — "car" alone pulled Matthew 13:22 into a parents answer.
-    if (s.length <= 3 && s !== tok) continue;
+    // Nov 8, 2026: the same truncation also ate real words that stand as
+    // headings in their own right — "taxes" -> "tax" never reached the
+    // search at all, so a taxes question was answered from "government"
+    // alone. A truncated stem survives when it is a whole word in a
+    // Nave's heading or a synonym key (SHORT_STEM_OK, built in
+    // loadSearch; "car" is struck from it by hand — its only heading is
+    // the place name Beth-Car, and the "caring" artifact above is the
+    // very case this guard exists for).
+    if (s.length <= 3 && s !== tok && !(SHORT_STEM_OK && SHORT_STEM_OK.has(s))) continue;
     seen.add(s);
     concepts.push({ stem: s, word: tok, direct: true });
     for (const syn of SYNONYMS[s] || []) {
@@ -206,13 +233,35 @@ const TOPIC_BRIDGES = {
 // right must not name-match the heading on the left — "burned out" matched
 // "Burning Bush" on the word "burn" and put Exodus 3 in a rest answer.
 // (A question actually about the burning bush still matches via "bush".)
-const NAME_MATCH_BLOCK = { "Burning Bush": new Set(["burn"]) };
+// Nov 8, 2026: the Nov 5 entry never actually fired — Nave's data carries
+// BOTH "Burning Bush" and the inverted "Bush, Burning", and the inverted
+// heading is the one the burnout question matched. The map is keyed by the
+// DATA names below. Same collision family, same remedy: micro-headings
+// that merely contain a common noun ("Conscience Money", "Sin Money",
+// "Money Changers" on any money question; "Beaten Work"/"Works" on any
+// job question; "Son-In-Law" on any son question) must not name-match on
+// that noun — each remains reachable through its distinctive word
+// ("conscience", "changers", "beaten", "law") and through the entry index.
+const NAME_MATCH_BLOCK = {
+  "Burning Bush": new Set(["burn"]),
+  "Bush, Burning": new Set(["burn"]),
+  "Burning": new Set(["burn"]),
+  "Conscience Money": new Set(["money"]),
+  "Sin Money": new Set(["money"]),
+  "Money Changers": new Set(["money"]),
+  "Beaten Work": new Set(["work"]),
+  "Works": new Set(["work"]),
+  "Sabbath Day\u2019 S Journey": new Set(["sabbath", "sunday"]),
+  "Son-In-Law": new Set(["son"]),
+  "Walking": new Set(["walk"]),
+};
 
 let SEARCH = null;
 function loadSearch() {
   if (SEARCH) return SEARCH;
   const load = (f) => JSON.parse(readFileSync(new URL(`../data/${f}`, import.meta.url), "utf8"));
-  const kjv = load("kjv.json");
+  const kjvText = load("kjv.json");
+  const bsbRaw = load("bsb.json");
   const topicsData = load("topics.json");
   const xref = load("xref.json");
   const entryIndex = load("entry-index.json");
@@ -222,6 +271,13 @@ function loadSearch() {
     return new Set(words.map(stem).filter((w) => w.length >= 3 && !["the", "of", "and"].includes(w)));
   });
   const topicByName = new Map(topicsData.topics.map((n, i) => [n, i]));
+  if (!SHORT_STEM_OK) {
+    SHORT_STEM_OK = new Set(Object.keys(SYNONYMS));
+    for (const name of topicsData.topics) {
+      for (const w of name.toLowerCase().match(/[a-z']+/g) || []) if (w.length === 3) SHORT_STEM_OK.add(w);
+    }
+    SHORT_STEM_OK.delete("car"); // place name Beth-Car only — see conceptsOf
+  }
 
   // Curated reference supplements (Nov 5, 2026 fix pass). The audit found
   // the classic teaching texts for several pastoral topics are simply not
@@ -270,17 +326,30 @@ function loadSearch() {
     if (add.length) topicsData.byTopic[ti] = [...add, ...topicsData.byTopic[ti].filter((ri) => !add.includes(ri))];
   }
 
-  const verseKeys = Object.keys(kjv);
+  const verseKeys = Object.keys(kjvText);
   const ordinal = new Map(verseKeys.map((k, i) => [k, i]));
   const parsedVerse = verseKeys.map((k) => {
     const m = k.match(/^(.+?) (\d+):(\d+)$/);
     return { book: m[1], ch: +m[2], v: +m[3] };
   });
-  const verseStemSets = verseKeys.map((k) => {
+  // Per-translation text sources (Nov 8, 2026). bsb.json is keyed exactly
+  // like kjv.json and already carries the KJV text at the BSB's 16 blank
+  // verse numbers; the merge below is a second belt on that suspender, so
+  // a key missing from bsb.json could never render blank either. Verse
+  // keys, order and versification are shared — only the words differ —
+  // and each source carries its own stem sets, because the full-text scan
+  // must run over the words the visitor will actually read.
+  const bsbText = {};
+  for (const k of verseKeys) bsbText[k] = (bsbRaw[k] && bsbRaw[k].trim()) ? bsbRaw[k] : kjvText[k];
+  const stemSetsOf = (textMap) => verseKeys.map((k) => {
     const set = new Set();
-    for (const tok of kjv[k].toLowerCase().match(/[a-z']+/g) || []) set.add(stem(tok));
+    for (const tok of textMap[k].toLowerCase().match(/[a-z']+/g) || []) set.add(stem(tok));
     return set;
   });
+  const SOURCES = {
+    bsb: { id: "bsb", name: "Berean Standard Bible", text: bsbText, stemSets: stemSetsOf(bsbText) },
+    kjv: { id: "kjv", name: "King James Version", text: kjvText, stemSets: stemSetsOf(kjvText) },
+  };
   const xrefByVerse = new Map();
   xref.verses.forEach((v, i) => { if (xref.byVerse[i].length) xrefByVerse.set(v, xref.byVerse[i].map((j) => xref.refs[j])); });
 
@@ -311,10 +380,10 @@ function loadSearch() {
 
   // Passage text in the page library's own format (verse number + text, one
   // verse per line) for the passage panel.
-  function panelPassageText(ref, lead = false) {
+  function panelPassageText(ref, lead = false, src = SOURCES.bsb) {
     const { verses, truncated } = expandRef(ref, 40);
     if (!verses.length) return null;
-    const fmt = (arr) => arr.map((v) => `${parsedVerse[ordinal.get(v)].v} ${kjv[v]}`).join("\n");
+    const fmt = (arr) => arr.map((v) => `${parsedVerse[ordinal.get(v)].v} ${src.text[v]}`).join("\n");
     // Long ranges show head + closing verses, same as the answer body;
     // the lead passage of a long range gets a wider head (Nov 5, 2026
     // fix pass).
@@ -326,6 +395,7 @@ function loadSearch() {
   }
 
   function searchAnswer(question, opts = {}) {
+    const src = SOURCES[opts.translation === "kjv" ? "kjv" : "bsb"];
     const concepts = opts.concepts || conceptsOf(question);
     let topTopics = null;
     let nameDirectCount = new Map(); // filled by the topic-scoring pass below
@@ -369,6 +439,16 @@ function loadSearch() {
       if (!concepts.some((c) => c.stem === "valley")) {
         const vi = topicByName.get("Decision, Valley of");
         if (vi !== undefined) topicScore.delete(vi);
+      }
+      // Nave's "Way" heading is Christ and the Christian life; in plain
+      // speech "way" is usually an idiom ("a way out", "the way I feel").
+      // Keep the heading only when the question carries the religious
+      // sense on its face (Nov 8, 2026 — the debt question's "don't see a
+      // way out" had been naming "Way" as a topic and pulling Acts 19:23
+      // — "a stir about that way" — into a debtor's answer).
+      if (!/\b(jesus|christ|the way|way of the lord|way of god|salvation|disciples|his ways|my ways)\b/i.test(String(question || ""))) {
+        const wi = topicByName.get("Way");
+        if (wi !== undefined) topicScore.delete(wi);
       }
       let rankedTopics = [...topicScore.entries()].sort((a, b) => b[1] - a[1]);
       // seeAlso reinforcement from the top two topics
@@ -441,14 +521,15 @@ function loadSearch() {
       }
     }
 
-    // full-text scoring over the whole KJV. The normal pass scans the
+    // full-text scoring over the whole Bible in the chosen translation.
+    // The normal pass scans the
     // question's own stems; a relaxed pass also lets the synonym stems join
     // the scan (broader concepts). A forced-topic pass skips the scan.
     const scanStems = opts.forceTopic ? [] : opts.relaxed
       ? concepts.map((c) => c.stem)
       : concepts.filter((c) => c.direct).map((c) => c.stem);
     const ftScore = new Map();
-    verseStemSets.forEach((set, i) => {
+    src.stemSets.forEach((set, i) => {
       let distinct = 0, hits = 0;
       for (const s of scanStems) if (set.has(s)) { distinct++; hits++; }
       if (distinct) ftScore.set(i, { distinct, hits });
@@ -471,7 +552,7 @@ function loadSearch() {
       if (!verses.length) return 0;
       const hit = new Set();
       for (const v of verses) {
-        const set = verseStemSets[ordinal.get(v)];
+        const set = src.stemSets[ordinal.get(v)];
         for (const s of allStems) if (set.has(s)) hit.add(s);
       }
       return Math.min(2 * hit.size, 6);
@@ -496,6 +577,13 @@ function loadSearch() {
         if (curated && curated.has(ref)) {
           e.weights.push(10);
           if (!e.curated) { e.curated = true; e.bonus += 8; }
+          // A heading the visitor named in their own words, with two or
+          // more of its name words spoken ("prodigal son"), has told us
+          // exactly which story they mean — its flagship text should
+          // lead, not lose by a point to a same-words coincidence
+          // (Nov 8, 2026: 2 Samuel 6:20 outscored Luke 15:11-32 by
+          // 30-29 on the prodigal question under the BSB scan).
+          if ((nameDirectCount.get(ti) || 0) >= 2 && !e.namedLift) { e.namedLift = true; e.bonus += 4; }
         } else {
           e.weights.push(topicWeight[r]);
         }
@@ -666,29 +754,48 @@ function loadSearch() {
     // De-inversion can make two distinct Nave's headings display identically
     // (e.g. "Bush, Burning" alongside a literal "Burning Bush") — show each
     // displayed name once.
-    const topicNames = crisisTopics || [...new Set(topTopics.map(([ti]) => displayTopicName(topicsData.topics[ti])))];
+    // Display filter (Nov 8, 2026): name only the topics that actually
+    // contributed a passage to this answer. Scoring can lift a heading
+    // into the top set on entry-index noise alone ("Industry" on a
+    // Sundays question, "Punishment" on a burnout question); naming it
+    // in the answer claims a relevance it never earned. If nothing in
+    // the top set contributed (a pure full-text answer), the top set is
+    // named as before. Crisis topics are set by the care assembly above
+    // and are exempt.
+    let displayTopics = topTopics;
+    if (!crisisTopics) {
+      const contributing = topTopics.filter(([ti]) => {
+        const trefs = new Set(topicsData.byTopic[ti].slice(0, 120).map((ri) => topicsData.refs[ri]));
+        return rankedRefs.some((r) => trefs.has(r));
+      });
+      if (contributing.length) displayTopics = contributing;
+    }
+    const topicNames = crisisTopics || [...new Set(displayTopics.map(([ti]) => displayTopicName(topicsData.topics[ti])))];
     const themesLine = topicNames.length ? topicNames.join("; ") : "searched across the whole Bible";
     const passages = rankedRefs.slice(0, 3).map((ref, idx) => {
       // Ranges longer than the display cap show head + closing verses
       // (Nov 5, 2026 fix pass): the prodigal's homecoming (Luke 15:20-24)
       // sat past the old 8-verse cut. The lead passage of a long range
       // gets a wider head (12 verses), enough to reach the homecoming.
-      // Both segments are verbatim KJV.
+      // Both segments are verbatim Scripture in the chosen translation.
       const { verses, truncated } = expandRef(ref, 40);
       if (!verses.length) return { ref, text: "" };
       if (verses.length > 8) {
         const headN = idx === 0 && verses.length > 15 ? 12 : 5;
-        const head = verses.slice(0, headN).map((v) => kjv[v]).join(" ");
-        const tail = verses.slice(-3).map((v) => kjv[v]).join(" ");
+        const head = verses.slice(0, headN).map((v) => src.text[v]).join(" ");
+        const tail = verses.slice(-3).map((v) => src.text[v]).join(" ");
         return { ref, text: head + " … " + tail };
       }
-      const text = verses.map((v) => kjv[v]).join(" ");
+      const text = verses.map((v) => src.text[v]).join(" ");
       return { ref, text: text + (truncated ? " …" : "") };
     });
+    // The panel carries every ranked reference, not just the three in
+    // the answer body, so the page's passage reader can show any of them
+    // in the chosen translation (Nov 8, 2026).
     const panelPassages = {};
-    for (const p of passages) {
-      const t = panelPassageText(p.ref, p.ref === rankedRefs[0]);
-      if (t) panelPassages[p.ref] = { title: `${p.ref} — King James Version`, text: t };
+    for (const ref of rankedRefs) {
+      const t = panelPassageText(ref, ref === rankedRefs[0], src);
+      if (t) panelPassages[ref] = { title: `${ref} — ${src.name}`, text: t };
     }
     const [firstRef, secondRef] = rankedRefs;
     const principle =
@@ -718,12 +825,22 @@ function loadSearch() {
       `Biblical Principle:\n${principle}\n\n` +
       `Related Biblical Story / Passage:\n${passages.length ? `${passages[0].ref}\n${passages[0].text}` : ""}\n\n` +
       `Additional Biblical Connections:\n${passages.slice(1).map((p) => `${p.ref}\n${p.text}`).join("\n\n")}\n\n` +
-      `King James Version Scripture References:\n${rankedRefs.join("; ")}\n\n` +
+      `${src.name} Scripture References:\n${rankedRefs.join("; ")}\n\n` +
       `Reflection Questions:\n${questions.map((q) => "- " + q).join("\n")}\n\n` +
       `Plain-Language Guidance:\n${plainGuidance}\n\n` +
       `Next Wise Step:\n${nextStep}\n\n` +
       `Disclaimer:\nWisdomCompass provides spiritual and biblical guidance only. It is not legal, medical, mental health, financial, or emergency advice. For urgent danger, abuse, self-harm, or emergency situations, contact emergency services, a qualified professional, or trusted local help immediately.`;
-    return { guidance, passages: panelPassages, meta: { topics: topicNames, leadRef: rankedRefs[0] || null } };
+    return {
+      guidance,
+      passages: panelPassages,
+      meta: { topics: topicNames, leadRef: rankedRefs[0] || null, translation: src.id },
+      // Server-side only (the handler never serializes this): the three
+      // prose pieces the optional Gemini composition layer may rewrite,
+      // and the retrieved material it may quote. Everything else in the
+      // answer — passages, references, reflection questions, disclaimer —
+      // always comes from this search alone.
+      parts: { principle, plainGuidance, nextStep, crisis, topics: topicNames, refs: rankedRefs, passages },
+    };
   }
 
   // How much matching weight a concept carries: topics whose name or entry
@@ -742,20 +859,20 @@ function loadSearch() {
   //   3. last resort — the same assembly run against Nave's WISDOM topic,
   //      so even an unmatchable question gets a search-produced answer
   //      about seeking wisdom, never a stored composed answer.
-  function answerSearch(question) {
-    let r = searchAnswer(question);
+  function answerSearch(question, translation) {
+    let r = searchAnswer(question, { translation });
     if (r) return { answer: r, level: 1 };
     const concepts = conceptsOf(question);
     if (concepts.length > 1) {
       const weakest = concepts.reduce((a, b) => (conceptWeight(b) < conceptWeight(a) ? b : a));
-      r = searchAnswer(question, { concepts: concepts.filter((c) => c !== weakest), relaxed: true });
+      r = searchAnswer(question, { concepts: concepts.filter((c) => c !== weakest), relaxed: true, translation });
       if (r) return { answer: r, level: 2 };
     }
     if (concepts.length) {
-      r = searchAnswer(question, { relaxed: true });
+      r = searchAnswer(question, { relaxed: true, translation });
       if (r) return { answer: r, level: 3 };
     }
-    return { answer: searchAnswer(question, { forceTopic: "Wisdom" }), level: 4 };
+    return { answer: searchAnswer(question, { forceTopic: "Wisdom", translation }), level: 4 };
   }
 
   SEARCH = { searchAnswer: answerSearch, conceptsOf };
@@ -763,15 +880,17 @@ function loadSearch() {
 }
 
 // Every question is answered by the whole-Bible search — no guide layer,
-// no threshold, no composed answers (Jeff's decision, Nov 4, 2026). The
-// search's own fallback chain (relaxed retry, then the WISDOM topic through
-// the same machinery) lives inside answerSearch above, which also reports
-// which step answered (the level) for the anonymous question log.
-// (The old AI path — TOPICAL_GUIDE, the OpenAI client, and the AI_ENABLED
-// branch — was removed in the question-log build, Nov 4, 2026: AI was off
-// by Jeff's decision, and the dead code only obscured the live search.)
-function answerFor(situation) {
-  const { answer } = loadSearch().searchAnswer(situation);
+// no threshold (Jeff's decision, Nov 4, 2026). The search's own fallback
+// chain (relaxed retry, then the WISDOM topic through the same machinery)
+// lives inside answerSearch above, which also reports which step answered
+// (the level) for the anonymous question log. The optional Gemini
+// composition layer lives in the handler below: it receives only what
+// this search retrieved and can never change the passages, the
+// references, or the disclaimer — and without GEMINI_API_KEY the answers
+// are exactly this search's template assembly, as they have been since
+// Nov 4, 2026.
+function answerFor(situation, translation) {
+  const { answer } = loadSearch().searchAnswer(situation, translation);
   return answer ? { guidance: answer.guidance, passages: answer.passages } : answer;
 }
 
@@ -794,6 +913,145 @@ function categoryOf(question) {
   return cat;
 }
 
+
+// ---- Optional Gemini composition layer (Nov 8, 2026) ----
+// Jeff's Nov 4, 2026 Phase B design, revived under his Nov 8, 2026 rule
+// that WisdomCompass carries NO paid expenses: this layer runs only on
+// the Gemini API's free tier, only when GEMINI_API_KEY is present in the
+// environment, and only for ordinary questions — crisis answers are
+// assembled locally above and never leave the site, and neither do
+// sensitive-category questions. The search retrieves; this layer only
+// re-voices the principle / plain-language guidance / next-step prose
+// around what the search retrieved. It may quote ONLY the passage texts
+// it is handed, verbatim, and cite ONLY the references it is handed.
+// Every output is validated against those fences; any failure — network,
+// timeout, malformed output, an invented reference, an altered quote —
+// falls back silently to the search's own template assembly. With no key
+// set, nothing in this section runs at all.
+const GEMINI_MODEL = "gemini-2.5-flash";
+const GEMINI_TIMEOUT_MS = 8000;
+const BIBLE_BOOKS = ["Genesis", "Exodus", "Leviticus", "Numbers", "Deuteronomy", "Joshua", "Judges", "Ruth",
+  "1 Samuel", "2 Samuel", "1 Kings", "2 Kings", "1 Chronicles", "2 Chronicles", "Ezra", "Nehemiah", "Esther",
+  "Job", "Psalm", "Proverbs", "Ecclesiastes", "Song of Solomon", "Isaiah", "Jeremiah", "Lamentations",
+  "Ezekiel", "Daniel", "Hosea", "Joel", "Amos", "Obadiah", "Jonah", "Micah", "Nahum", "Habakkuk", "Zephaniah",
+  "Haggai", "Zechariah", "Malachi", "Matthew", "Mark", "Luke", "John", "Acts", "Romans", "1 Corinthians",
+  "2 Corinthians", "Galatians", "Ephesians", "Philippians", "Colossians", "1 Thessalonians", "2 Thessalonians",
+  "1 Timothy", "2 Timothy", "Titus", "Philemon", "Hebrews", "James", "1 Peter", "2 Peter", "1 John", "2 John",
+  "3 John", "Jude", "Revelation"];
+const BOOK_ALT = [...BIBLE_BOOKS].sort((a, b) => b.length - a.length)
+  .map((b) => b.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+const REF_RE = new RegExp(`\\b(?:${BOOK_ALT})\\s+\\d+:\\d+(?:\\s*-\\s*(?:\\d+:)?\\d+)?`, "g");
+const CHAPTER_REF_RE = new RegExp(`\\b(?:${BOOK_ALT})\\s+\\d+\\b(?!\\s*:)`, "g");
+
+function parseRefSimple(ref) {
+  let m = String(ref).match(/^(.+?) (\d+):(\d+)(?:-(?:(\d+):)?(\d+))?$/);
+  if (m) return { book: m[1], ch1: +m[2], v1: +m[3], ch2: m[4] ? +m[4] : +m[2], v2: m[5] ? +m[5] : +m[3] };
+  m = String(ref).match(/^(.+?) (\d+)$/);
+  if (m) return { book: m[1], ch1: +m[2], v1: 1, ch2: +m[2], v2: 999 };
+  return null;
+}
+// A cited reference is within bounds when its whole span sits inside one
+// of the retrieved references' spans (same book).
+function refCovered(cited, allowedRefs) {
+  const c = parseRefSimple(cited);
+  if (!c) return false;
+  for (const a of allowedRefs) {
+    const p = parseRefSimple(a);
+    if (!p || p.book !== c.book) continue;
+    const afterStart = c.ch1 > p.ch1 || (c.ch1 === p.ch1 && c.v1 >= p.v1);
+    const beforeEnd = c.ch2 < p.ch2 || (c.ch2 === p.ch2 && c.v2 <= p.v2);
+    if (afterStart && beforeEnd) return true;
+  }
+  return false;
+}
+const normalizeForQuote = (s) => String(s || "")
+  .replace(/^\s*\d+\s+/gm, " ")           // verse numbers in the panel text
+  .toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").replace(/\s+/g, " ").trim();
+
+// Returns { principle, plainGuidance, nextStep } or null. Null always
+// means "use the template assembly" — this function never throws.
+function validateComposition(obj, allowedRefs, haystack) {
+  if (!obj || typeof obj !== "object") return null;
+  const { principle, plainGuidance, nextStep } = obj;
+  for (const [v, cap] of [[principle, 1400], [plainGuidance, 1600], [nextStep, 500]]) {
+    if (typeof v !== "string" || v.trim().length < 20 || v.length > cap) return null;
+    if (/https?:\/\//i.test(v)) return null;
+  }
+  const all = `${principle}\n${plainGuidance}\n${nextStep}`;
+  const cited = [...(all.match(REF_RE) || []), ...(all.match(CHAPTER_REF_RE) || [])];
+  for (const c of cited) if (!refCovered(c.replace(/\s+/g, " "), allowedRefs)) return null;
+  const hay = " " + normalizeForQuote(haystack) + " ";
+  const quotes = all.match(/["\u201C]([^"\u201D]{10,})["\u201D]/g) || [];
+  for (const q of quotes) {
+    const inner = q.slice(1, -1);
+    if (!hay.includes(" " + normalizeForQuote(inner) + " ") && !hay.includes(normalizeForQuote(inner))) return null;
+  }
+  return { principle: principle.trim(), plainGuidance: plainGuidance.trim(), nextStep: nextStep.trim() };
+}
+
+const COMPOSE_SYSTEM = `You are the writing voice of WisdomCompass, a free decision-guidance site. A visitor has brought a real-life decision or struggle. A Bible search has already been run for them; you are given its topics and the exact passage texts it found. Your job is to write the three prose pieces of their answer — the biblical principle, the plain-language guidance, and the next wise step — in the site's established shape: first the precedent (what Scripture shows God commending, warning against, or doing for people in this situation), then the principle (the pattern to weigh the decision against), then one concrete next step.
+
+Voice: warm, plain, steady — like Hannah, the site's presenter: a trusted friend who knows the Bible well and talks straight. Plain modern English. Speak to one person ("you"). Short paragraphs. Wisdom upfront, faith underneath: lead with clear thinking, let the Scripture carry the weight. The foundation is God, family, and country; the standard is the Bible's view, not the visitor's own beliefs. Never preach at the visitor, never scold, never use church jargon without explaining it, and never promise an outcome God has not promised.
+
+Hard rules:
+1. Quote Scripture ONLY from the passage texts provided to you, word for word, and put quotation marks around every quotation. Never quote from memory.
+2. Cite ONLY the references provided to you. Never invent, complete, or alter a reference.
+3. Do not add facts, stories, or verses that are not in the provided material.
+4. End the next step with exactly one concrete action the person can take this week.
+5. Return ONLY a JSON object: {"principle": "...", "plainGuidance": "...", "nextStep": "..."}. No headings, no markdown, no text outside the JSON.
+
+How the three pieces work:
+- principle (2 short paragraphs at most): name the precedent first — who in these passages stood where the visitor stands, and what God commended or warned against — then state the principle plainly.
+- plainGuidance (2 short paragraphs at most): say what this means for the visitor's actual situation, in everyday words, using their situation's own terms.
+- nextStep (1–2 sentences): begin by pointing them to read the lead passage in full, then give the one concrete action.
+
+Example of the expected shape (the quotations are copied word for word from the material that example was given):
+Material given: Philippians 4:6 — "Be anxious for nothing, but in everything, by prayer and petition, with thanksgiving, present your requests to God." Topics: Care; Peace.
+Good output: {"principle": "Paul wrote to people who had real reasons to worry, and he does not tell them their concerns are small. He points them to a trade: "Be anxious for nothing, but in everything, by prayer and petition, with thanksgiving, present your requests to God." The precedent is a church that carried its worries to God in prayer instead of carrying them alone. The principle is that peace follows handing the worry over — not pretending it away.", "plainGuidance": "For your decision, that means the anxious circling does not have to be the thing that decides. Put the actual request — the specific outcome you are afraid of — into words before God, with thanks for what he has already done. Then judge the options by the passages, not by the fear.", "nextStep": "Read Philippians 4:6-7 in full and pray it through before you decide. Then take the one step you already know is wise, and talk it over with a trusted believer this week."}`;
+
+async function composeWithGemini({ question, topics, refs, passageTexts }) {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) return null;
+  const material = refs.slice(0, 5).map((ref) => {
+    const t = passageTexts[ref];
+    return t ? `${ref}\n${t.text}` : ref;
+  }).join("\n\n");
+  const userPrompt =
+    `Visitor's situation:\n${question}\n\n` +
+    `Topics the search found: ${topics.join("; ") || "searched across the whole Bible"}\n\n` +
+    `Passages the search retrieved (Berean Standard Bible — quote ONLY from these, word for word):\n${material}\n\n` +
+    `References you may cite (no others): ${refs.join("; ")}`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
+  try {
+    const resp = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
+      {
+        method: "POST",
+        signal: controller.signal,
+        headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: COMPOSE_SYSTEM }] },
+          contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+          generationConfig: { responseMimeType: "application/json", temperature: 0.4, maxOutputTokens: 1200 },
+        }),
+      }
+    );
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    const text = (((data.candidates || [])[0] || {}).content || {}).parts?.map((p) => p.text || "").join("") || "";
+    if (!text) return null;
+    let obj;
+    try { obj = JSON.parse(text); } catch { return null; }
+    const haystack = Object.values(passageTexts).map((p) => p.text).join("\n");
+    return validateComposition(obj, refs, haystack);
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
@@ -802,9 +1060,33 @@ export default async function handler(req, res) {
   try {
     const situation = String(req.body?.situation || "").trim().slice(0, 3000);
     if (!situation) return res.status(400).json({ error: "Please describe your situation first." });
+    // Bible text choice (Nov 8, 2026): the Berean Standard Bible is the
+    // default; "kjv" serves the King James text end to end.
+    const translation = String(req.body?.translation || "").toLowerCase() === "kjv" ? "kjv" : "bsb";
     const search = loadSearch();
-    const { answer, level } = search.searchAnswer(situation);
+    const { answer, level } = search.searchAnswer(situation, translation);
     if (!answer) return res.status(500).json({ error: "Something went wrong. Please try again." });
+    // Optional composition (see the Gemini section above): ordinary
+    // questions only, and only when the free-tier key is in place. Any
+    // failure leaves the search's own assembly untouched. Crisis answers
+    // never leave the site; neither do sensitive-category questions.
+    let composed = false;
+    if (process.env.GEMINI_API_KEY && answer.parts && !answer.parts.crisis
+        && !categoryOf(situation).includes("sensitive")) {
+      const c = await composeWithGemini({
+        question: situation,
+        topics: answer.parts.topics,
+        refs: answer.parts.refs,
+        passageTexts: answer.passages,
+      }).catch(() => null);
+      if (c) {
+        let g = answer.guidance;
+        if (g.includes(answer.parts.principle)) g = g.replace(answer.parts.principle, c.principle);
+        if (g.includes(answer.parts.plainGuidance)) g = g.replace(answer.parts.plainGuidance, c.plainGuidance);
+        if (g.includes(answer.parts.nextStep)) g = g.replace(answer.parts.nextStep, c.nextStep);
+        if (g !== answer.guidance) { answer.guidance = g; composed = true; }
+      }
+    }
     // Anonymous question log (disclosed on the privacy page): one record
     // per answered question — the question, the concepts/topics/lead
     // passage the search used, and which fallback step answered. No
@@ -825,7 +1107,9 @@ export default async function handler(req, res) {
       search.conceptsOf(situation).map((c) => c.stem).join(", "),
       (answer.meta && answer.meta.topics ? answer.meta.topics : []).join("; "),
       (answer.meta && answer.meta.leadRef) || "",
-      String(level),
+      // Which path answered: the search fallback level, with a "g"
+      // appended when the Gemini composition layer voiced the prose.
+      String(level) + (composed ? "g" : ""),
       categoryOf(situation),
     ]);
     try {
