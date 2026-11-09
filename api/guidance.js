@@ -1107,7 +1107,15 @@ function categoryOf(question) {
 // missing section — falls back silently to the search's own template
 // assembly, unchanged. With no key set, nothing in this section runs.
 const GEMINI_MODEL = "gemini-3.5-flash";
-const GEMINI_TIMEOUT_MS = 8000;
+// Token budget (Nov 9, 2026 fix): the gemini-3.5-flash alias now serves
+// a thinking model whose thought tokens count against maxOutputTokens.
+// The old 1800 cap let thinking consume the whole budget — the visible
+// JSON came back truncated mid-object (finishReason MAX_TOKENS) and
+// every reading failed the fences, so composed was always false in
+// production. The reader now gets 8192 output tokens with thinking
+// capped at 1024, and 15s to finish (thinking + the full JSON reading
+// did not fit the old 8s abort budget either).
+const GEMINI_TIMEOUT_MS = 15000;
 const BIBLE_BOOKS = ["Genesis", "Exodus", "Leviticus", "Numbers", "Deuteronomy", "Joshua", "Judges", "Ruth",
   "1 Samuel", "2 Samuel", "1 Kings", "2 Kings", "1 Chronicles", "2 Chronicles", "Ezra", "Nehemiah", "Esther",
   "Job", "Psalm", "Proverbs", "Ecclesiastes", "Song of Solomon", "Isaiah", "Jeremiah", "Lamentations",
@@ -1217,7 +1225,7 @@ async function readWithGemini({ question, fullPassages }) {
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: READER_SYSTEM }] },
           contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-          generationConfig: { responseMimeType: "application/json", temperature: 0.4, maxOutputTokens: 1800 },
+          generationConfig: { responseMimeType: "application/json", temperature: 0.4, maxOutputTokens: 8192, thinkingConfig: { thinkingBudget: 1024 } },
         }),
       }
     );
@@ -1287,7 +1295,7 @@ async function readChatWithGemini({ message, history, fullPassages }) {
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: CHAT_SYSTEM }] },
           contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-          generationConfig: { responseMimeType: "application/json", temperature: 0.4, maxOutputTokens: 1800 },
+          generationConfig: { responseMimeType: "application/json", temperature: 0.4, maxOutputTokens: 8192, thinkingConfig: { thinkingBudget: 1024 } },
         }),
       }
     );
