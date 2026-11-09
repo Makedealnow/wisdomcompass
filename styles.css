@@ -87,3 +87,18 @@ body{background:linear-gradient(180deg,#fffdf8 0%,#f7f1e6 52%,#eef3f8 100%)}
 .verse-card .verse-ref{color:#c9a227;font-weight:900;letter-spacing:.04em;margin:0}
 .icon-badge{display:grid;place-items:center;width:52px;height:52px;border-radius:16px;background:#f0e5d3;margin-bottom:14px}
 .icon-badge svg{width:28px;height:28px;stroke:#9c3428;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+
+/* Nov 8, 2026 fix — the "Read the passages in: Berean / King James" bar
+   must never cover answer text. The bar itself carries no sticky rule;
+   its whole panel (.result-panel) is position:sticky in the blocks
+   above, which pinned the panel — bar included — over the page while
+   scrolling. Chosen fix: unstick the panel (the simpler, robust
+   option). The panel is static now, so the bar sits in the normal flow
+   under the answer and scrolls with the page like everything else; the
+   answer box keeps an internal scroll cap so long answers stay
+   manageable. (The keep-it-sticky alternative — scroll padding inside
+   the box — cannot stop a pinned bar from overlapping lines mid-scroll,
+   and the stickiness lives in three separate cascade blocks, so one
+   override here is also the smaller change.) */
+.result-panel{position:static;max-height:none}
+.result-panel .result-box{max-height:70vh}

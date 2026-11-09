@@ -31,6 +31,7 @@ let latestGuidance = "";
 let latestRenderedText = "";
 let latestLogId = null;
 let apiPassages = {};
+let apiRefs = [];
 // Bible translation choice (Nov 8, 2026): the Berean Standard Bible is
 // the default; the King James Version stays one tap away. The choice is
 // remembered on this device and sent with every search.
@@ -642,10 +643,19 @@ function showGuidanceTool() {
   if (situationInput) situationInput.focus();
 }
 
+// Set at the prefill below when a question arrives in the URL and the
+// disclaimer gate is still up: the question runs the moment the visitor
+// agrees — after the gate, never instead of it (Nov 8, 2026 fix).
+let wcAutoRunPending = false;
+
 if (agreeDisclaimerBtn) {
   agreeDisclaimerBtn.addEventListener("click", () => {
     sessionStorage.setItem("wisdomDisclaimerAccepted", "yes");
     showGuidanceTool();
+    if (wcAutoRunPending) {
+      wcAutoRunPending = false;
+      if (generateBtn) generateBtn.click();
+    }
   });
 }
 
@@ -655,6 +665,17 @@ if (guidanceDisclaimer && guidanceTool && sessionStorage.getItem("wisdomDisclaim
 
 const __wcSituation = new URLSearchParams(window.location.search).get("situation");
 if (__wcSituation && situationInput) { situationInput.value = __wcSituation.slice(0, 1200); }
+// Auto-run the prefilled question (Nov 8, 2026 fix): a visitor who tapped
+// a homepage question chip, the Ask band, or a video card's "Ask about
+// this" has already asked — they shouldn't have to tap Search Scripture
+// for the same question. If the disclaimer gate is still up, the run is
+// held pending and fires from the agree handler above; if the visitor
+// already agreed, it fires at the end of this script (once the Search
+// button's own handler exists). The pending flag is consumed wherever
+// it fires, so the question can never run twice.
+if (__wcSituation && situationInput && situationInput.value.trim()) {
+  wcAutoRunPending = true;
+}
 
 const micBtn = document.getElementById("micBtn");
 const SpeechRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -701,6 +722,7 @@ async function getGuidance(text) {
   const data = await response.json();
   if (!response.ok || !data.guidance) throw new Error(data.error || "Unable to generate guidance.");
   apiPassages = data.passages || {};
+  apiRefs = Array.isArray(data.refs) ? data.refs : [];
   latestLogId = data.logId || null;
   return data.guidance;
 }
@@ -719,6 +741,12 @@ function referencesForText(guidance, userText) {
   // chooses or adds references.
   const found = [];
   const push = (ref) => { if (passageFor(ref) && !found.includes(ref)) found.push(ref); };
+  // The API's own ranked order comes first (Nov 8, 2026 fix): the
+  // response carries the search's ranking explicitly, so the panel's
+  // buttons and default passage read the ranking itself — the same
+  // list the answer body and the next step are built from — instead of
+  // re-deriving it from the answer text below.
+  (apiRefs || []).forEach(push);
   const section = guidance.split(/Scripture References:\n/)[1];
   if (section) {
     section.split("\n\n")[0].split(";").map(s => s.trim()).filter(Boolean).forEach(push);
@@ -943,6 +971,7 @@ if (generateBtn) {
       // plainly and let the user try again.
       console.warn(error);
       apiPassages = {};
+      apiRefs = [];
       latestGuidance = "";
       latestRenderedText = "";
       latestLogId = null;
@@ -966,6 +995,7 @@ if (generateBtn) {
 if (clearBtn) {
   clearBtn.addEventListener("click", () => {
     situationInput.value = "";
+    apiRefs = [];
     latestGuidance = "";
     latestRenderedText = "";
     latestLogId = null;
@@ -987,6 +1017,20 @@ if (saveBtn) {
 }
 if (clearHistoryBtn) { clearHistoryBtn.addEventListener("click", () => { setHistory([]); renderHistory(); }); }
 renderHistory();
+
+// Auto-run, load path (Nov 8, 2026 fix): a returning visitor who already
+// agreed on an earlier visit gets the prefilled question run on load.
+// This sits at the very end of the script so the Search button's click
+// handler is registered before the click fires; the gate path consumes
+// the same flag in the agree handler, so only one of them can ever run.
+if (wcAutoRunPending) {
+  let alreadyAgreed = false;
+  try { alreadyAgreed = sessionStorage.getItem("wisdomDisclaimerAccepted") === "yes"; } catch (e) {}
+  if (alreadyAgreed) {
+    wcAutoRunPending = false;
+    if (generateBtn) generateBtn.click();
+  }
+}
 
 </script></main>
 <footer class="site-footer"><div><a class="logo" href="/">WisdomCompass</a><p>Decisions Matter</p><p class="tiny">Practical decision guidance rooted in timeless Biblical principles. Passages are shown in the Berean Standard Bible or the King James Version — your choice. NIV and commentary links open external study resources. Not professional, legal, medical, financial, mental health, or emergency advice.</p></div><div class="footer-links"><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/disclaimer">Disclaimer</a></div></footer>

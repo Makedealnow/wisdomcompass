@@ -833,7 +833,7 @@ function loadSearch() {
     return {
       guidance,
       passages: panelPassages,
-      meta: { topics: topicNames, leadRef: rankedRefs[0] || null, translation: src.id },
+      meta: { topics: topicNames, leadRef: rankedRefs[0] || null, refs: rankedRefs, translation: src.id },
       // Server-side only (the handler never serializes this): the three
       // prose pieces the optional Gemini composition layer may rewrite,
       // and the retrieved material it may quote. Everything else in the
@@ -980,6 +980,20 @@ function validateComposition(obj, allowedRefs, haystack) {
   const all = `${principle}\n${plainGuidance}\n${nextStep}`;
   const cited = [...(all.match(REF_RE) || []), ...(all.match(CHAPTER_REF_RE) || [])];
   for (const c of cited) if (!refCovered(c.replace(/\s+/g, " "), allowedRefs)) return null;
+  // A composed next step that tells the visitor to "start with" a
+  // passage must point at the ranked lead (allowedRefs[0]) — the same
+  // passage the answer body leads with and the panel opens on. A
+  // "start with" pointing anywhere else falls back to the template
+  // next step, which names the lead by construction (Nov 8, 2026 fix).
+  const startWith = nextStep.match(/start with\s+(.+)/i);
+  if (startWith && allowedRefs.length) {
+    const firstCited = (startWith[1].match(REF_RE) || [])[0];
+    if (firstCited) {
+      const lead = parseRefSimple(allowedRefs[0]);
+      const fc = parseRefSimple(firstCited.replace(/\s+/g, " "));
+      if (lead && fc && !(fc.book === lead.book && fc.ch1 === lead.ch1 && fc.v1 === lead.v1)) return null;
+    }
+  }
   const hay = " " + normalizeForQuote(haystack) + " ";
   const quotes = all.match(/["\u201C]([^"\u201D]{10,})["\u201D]/g) || [];
   for (const q of quotes) {
@@ -1115,7 +1129,10 @@ export default async function handler(req, res) {
     try {
       waitUntil(pendingLog);
     } catch { /* non-Vercel run: the append still proceeds on its own */ }
-    return res.status(200).json({ guidance: answer.guidance, passages: answer.passages, logId });
+    // refs carries the search's ranking explicitly, in order, so the
+    // page's passage panel reads the ranking itself instead of
+    // re-deriving it from the answer text (Nov 8, 2026 fix).
+    return res.status(200).json({ guidance: answer.guidance, passages: answer.passages, logId, refs: (answer.meta && answer.meta.refs) || [] });
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: "Something went wrong. Please try again." });
