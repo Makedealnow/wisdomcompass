@@ -1199,7 +1199,7 @@ Return ONLY a JSON object: {"lead": "<the reference of the chosen passage, exact
 // template assembly. This function never throws.
 async function readWithGemini({ question, fullPassages }) {
   const key = process.env.GEMINI_API_KEY;
-  if (!key || !fullPassages || !fullPassages.length) return null;
+  if (!key || !fullPassages || !fullPassages.length) { console.log("[WC-READER] fail no-key-or-passages"); return null; }
   const refs = fullPassages.map((p) => p.ref);
   const material = fullPassages.map((p) => `${p.ref}\n${p.text}`).join("\n\n");
   const userPrompt =
@@ -1221,15 +1221,19 @@ async function readWithGemini({ question, fullPassages }) {
         }),
       }
     );
-    if (!resp.ok) return null;
+    if (!resp.ok) { console.log(`[WC-READER] fail http-${resp.status}`); return null; }
     const data = await resp.json();
     const text = (((data.candidates || [])[0] || {}).content || {}).parts?.map((p) => p.text || "").join("") || "";
-    if (!text) return null;
+    if (!text) { console.log("[WC-READER] fail empty"); return null; }
     let obj;
-    try { obj = JSON.parse(text); } catch { return null; }
+    try { obj = JSON.parse(text); } catch { console.log("[WC-READER] fail bad-json"); return null; }
     const haystack = fullPassages.map((p) => p.text).join("\n");
-    return validateReading(obj, refs, haystack);
-  } catch {
+    const reading = validateReading(obj, refs, haystack);
+    if (!reading) { console.log("[WC-READER] fail fences"); return null; }
+    console.log("[WC-READER] ok");
+    return reading;
+  } catch (err) {
+    console.log(`[WC-READER] fail ${err && err.name === "AbortError" ? "timeout" : "network"}`);
     return null;
   } finally {
     clearTimeout(timer);
@@ -1258,7 +1262,7 @@ Return ONLY a JSON object: {"lead": "<the reference of the chosen passage, exact
 // template reply". This function never throws.
 async function readChatWithGemini({ message, history, fullPassages }) {
   const key = process.env.GEMINI_API_KEY;
-  if (!key || !fullPassages || !fullPassages.length) return null;
+  if (!key || !fullPassages || !fullPassages.length) { console.log("[WC-READER] fail no-key-or-passages"); return null; }
   const refs = fullPassages.map((p) => p.ref);
   const material = fullPassages.map((p) => `${p.ref}\n${p.text}`).join("\n\n");
   const story = history.length
@@ -1287,15 +1291,19 @@ async function readChatWithGemini({ message, history, fullPassages }) {
         }),
       }
     );
-    if (!resp.ok) return null;
+    if (!resp.ok) { console.log(`[WC-READER] fail http-${resp.status}`); return null; }
     const data = await resp.json();
     const text = (((data.candidates || [])[0] || {}).content || {}).parts?.map((p) => p.text || "").join("") || "";
-    if (!text) return null;
+    if (!text) { console.log("[WC-READER] fail empty"); return null; }
     let obj;
-    try { obj = JSON.parse(text); } catch { return null; }
+    try { obj = JSON.parse(text); } catch { console.log("[WC-READER] fail bad-json"); return null; }
     const haystack = fullPassages.map((p) => p.text).join("\n");
-    return validateReading(obj, refs, haystack);
-  } catch {
+    const reading = validateReading(obj, refs, haystack);
+    if (!reading) { console.log("[WC-READER] fail fences"); return null; }
+    console.log("[WC-READER] ok");
+    return reading;
+  } catch (err) {
+    console.log(`[WC-READER] fail ${err && err.name === "AbortError" ? "timeout" : "network"}`);
     return null;
   } finally {
     clearTimeout(timer);
