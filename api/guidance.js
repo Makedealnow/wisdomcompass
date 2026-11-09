@@ -1236,10 +1236,233 @@ async function readWithGemini({ question, fullPassages }) {
   }
 }
 
+const CHAT_SYSTEM = `You are Hannah, the warm, plain-spoken guide of WisdomCompass, talking with a visitor in a live chat. A Bible search has already gathered the passages that may answer the visitor's new message. From the passages provided, choose the ONE that most directly answers the new message — judge by what each passage actually is and means in context (direct teaching, story, wisdom, or metaphor), not by shared wording, and use the conversation only to understand what the visitor is referring to. Then explain the chosen passage to them in plain language, as a conversation, in five parts, in this order, each part headed by exactly the words given, on its own line:
+1. "The scene" — who is speaking or what is happening.
+2. "What it meant" — what it meant in its setting.
+3. "The teaching" — the teaching, point by point.
+4. "For your question" — how it bears on the visitor's message.
+5. "Read together" — the related passages from the provided set, read together.
+You may open with one short, warm sentence of your own before "The scene". Write as Hannah speaking to one person ("you"), warmly and plainly, in modern English, with no church jargon.
+
+Rules: use ONLY the passages provided; quote them exactly as given, word for word, and put quotation marks around every quotation; name no passage that was not provided; do not add advice beyond what the passages support.
+
+Return ONLY a JSON object: {"lead": "<the reference of the chosen passage, exactly as provided>", "explanation": "<the five-part explanation>"}. No markdown, no text outside the JSON.`;
+
+// The chat reader step: the same single fenced Gemini call as
+// readWithGemini, with the conversation carried as context. The
+// validation fences are IDENTICAL (validateReading) — a chat answer
+// ships only when its lead is one of the retrieved references, every
+// passage it names is covered by the retrieved set, every quotation
+// is verbatim in the handed texts, and all five parts are present.
+// Returns { lead, explanation } or null; null always means "use the
+// template reply". This function never throws.
+async function readChatWithGemini({ message, history, fullPassages }) {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key || !fullPassages || !fullPassages.length) return null;
+  const refs = fullPassages.map((p) => p.ref);
+  const material = fullPassages.map((p) => `${p.ref}\n${p.text}`).join("\n\n");
+  const story = history.length
+    ? history.map((h) => h.role === "user"
+        ? `Visitor: ${h.text.slice(0, 500)}`
+        : `Hannah${h.leadRef ? ` (led with ${h.leadRef})` : ""}: ${h.text.slice(0, 300)}`).join("\n")
+    : "(this is the visitor's first message)";
+  const userPrompt =
+    `You are continuing a conversation. The story so far is context only — earlier passages are NOT available to you; you may quote ONLY the passages listed below, retrieved fresh for the visitor's new message.\n\n` +
+    `Conversation so far:\n${story}\n\n` +
+    `Visitor's new message:\n${message}\n\n` +
+    `Passages the search retrieved for this message (quote ONLY from these, word for word; name no others):\n${material}`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
+  try {
+    const resp = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
+      {
+        method: "POST",
+        signal: controller.signal,
+        headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: CHAT_SYSTEM }] },
+          contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+          generationConfig: { responseMimeType: "application/json", temperature: 0.4, maxOutputTokens: 1800 },
+        }),
+      }
+    );
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    const text = (((data.candidates || [])[0] || {}).content || {}).parts?.map((p) => p.text || "").join("") || "";
+    if (!text) return null;
+    let obj;
+    try { obj = JSON.parse(text); } catch { return null; }
+    const haystack = fullPassages.map((p) => p.text).join("\n");
+    return validateReading(obj, refs, haystack);
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// One section's body out of the search's assembled template text (the
+// chat fallback reply is built from the template's own plain-language
+// guidance and next step, verbatim — the same words the ask flow
+// shows). Sections are single paragraphs in the assembly, separated
+// by blank lines and headed "<Label>:".
+function extractGuidanceSection(guidance, label) {
+  for (const block of String(guidance || "").split("\n\n")) {
+    if (block.startsWith(label + ":\n")) return block.slice(label.length + 2).trim();
+  }
+  return "";
+}
+
+// ---- Live chat with Hannah (Nov 8, 2026) ----
+// A chat turn is the ask pipeline wearing a conversation: the client
+// sends the visitor's new message plus the recent turns (kept only in
+// the page's memory — the server stores nothing beyond the anonymous
+// question log, one row per turn, same shape as the ask flow). The
+// history serves exactly two purposes: the search runs on an
+// interpreted question when the new message is a follow-up that leans
+// on the previous one (pronouns, "what if…", very short messages), and
+// the reader receives the story as context. Everything else is the
+// ask machinery unchanged: the verified search with passage
+// completion and widening, ONE fenced Gemini call per non-crisis
+// turn, the identical validation fences, and a silent fallback to a
+// template reply assembled from the search's own words. Crisis
+// wording in any message takes the local crisis path — zero Gemini
+// calls — exactly as in the ask flow.
+async function handleChatTurn(req, res) {
+  const message = String(req.body?.message || "").trim().slice(0, 3000);
+  if (!message) return res.status(400).json({ error: "Please type or say your question first." });
+  const translation = String(req.body?.translation || "").toLowerCase() === "kjv" ? "kjv" : "bsb";
+  // Sanitize the carried history: known roles only, bounded text, the
+  // last six exchanges at most. Anything malformed is dropped, never
+  // trusted — it is context for interpretation, nothing more.
+  const history = [];
+  if (Array.isArray(req.body?.history)) {
+    for (const h of req.body.history.slice(-12)) {
+      if (!h || (h.role !== "user" && h.role !== "hannah")) continue;
+      const text = String(h.text || "").trim().slice(0, 1200);
+      if (!text) continue;
+      const item = { role: h.role, text };
+      if (h.role === "hannah" && typeof h.leadRef === "string") item.leadRef = h.leadRef.slice(0, 80);
+      history.push(item);
+    }
+  }
+  const search = loadSearch();
+  // Interpreted question for the search. A crisis message always
+  // searches on its own words, so the care-first assembly triggers
+  // cleanly; a follow-up that leans on the visitor's previous message
+  // searches on the two together. A previous crisis turn is never
+  // folded in — its wording would re-trigger the crisis assembly on
+  // an ordinary follow-up.
+  let effective = message;
+  if (!isCrisis(message)) {
+    const prevUser = [...history].reverse().find((h) => h.role === "user");
+    if (prevUser && !isCrisis(prevUser.text)) {
+      const words = message.split(/\s+/).filter(Boolean).length;
+      const direct = search.conceptsOf(message).filter((c) => c.direct).length;
+      const leans = /\b(what (if|about)|how about|and if|but what|so what|then what)\b/i.test(message)
+        || direct === 0
+        || words <= 3
+        || (words <= 10 && /\b(she|her|hers|he|him|his|they|them|their|it|that|this|those|these)\b/i.test(message));
+      if (leans) effective = (prevUser.text + " " + message).slice(0, 3000);
+    }
+  }
+  const { answer, level } = search.searchAnswer(effective, translation);
+  if (!answer) return res.status(500).json({ error: "Something went wrong. Please try again." });
+  const crisis = !!(answer.parts && answer.parts.crisis);
+  let composed = false;
+  let reply = "";
+  if (!crisis && process.env.GEMINI_API_KEY && answer.parts) {
+    const r = await readChatWithGemini({
+      message,
+      history,
+      fullPassages: answer.parts.fullPassages,
+    }).catch(() => null);
+    if (r) {
+      const ordered = [r.lead, ...answer.parts.refs.filter((x) => x !== r.lead)];
+      const rebuilt = answer.parts.rebuild(ordered, r.explanation);
+      answer.passages = rebuilt.passages;
+      answer.meta = { ...answer.meta, leadRef: r.lead, refs: ordered };
+      reply = r.explanation;
+      composed = true;
+    }
+  }
+  if (!reply) {
+    // Template reply: the search's own plain-language guidance and
+    // next wise step, verbatim (for a crisis turn these ARE the care
+    // text — 988, 911, and the comfort passages lead).
+    const plain = extractGuidanceSection(answer.guidance, "Plain-Language Guidance");
+    const step = extractGuidanceSection(answer.guidance, "Next Wise Step");
+    reply = [plain, step].filter(Boolean).join("\n\n")
+      || extractGuidanceSection(answer.guidance, "Biblical Principle");
+  }
+  const leadRef = (answer.meta && answer.meta.leadRef) || null;
+  const panel = answer.passages || {};
+  // The quote block and the supporting passages carry the full texts
+  // the reader was handed (flowing text, no verse numbers — the chat
+  // reading format), not the panel's head-and-tail display text: the
+  // lead passage must never reach the visitor with its key verses
+  // elided by a display cap.
+  const fullByRef = new Map(((answer.parts && answer.parts.fullPassages) || []).map((p) => [p.ref, p.text]));
+  const translationName = (answer.meta && answer.meta.translation) === "kjv" ? "King James Version" : "Berean Standard Bible";
+  const leadEntry = leadRef ? panel[leadRef] : null;
+  const orderedRefs = (answer.meta && answer.meta.refs) || [];
+  const supporting = orderedRefs
+    .filter((ref) => ref !== leadRef && (fullByRef.has(ref) || panel[ref]))
+    .slice(0, 2)
+    .map((ref) => ({
+      ref,
+      title: `${ref} — ${translationName}`,
+      text: fullByRef.has(ref) ? fullByRef.get(ref) : panel[ref].text,
+    }));
+  // Anonymous question log: one row per chat turn, identical shape
+  // and semantics to the ask flow (see the handler's note) — the
+  // visitor's own message, the concepts it carried, the topics and
+  // lead the (possibly interpreted) search used, the fallback level,
+  // and the "g" suffix when the reader voiced the reply.
+  const logId = randomUUID();
+  const pendingLog = logQuestion([
+    new Date().toISOString(),
+    logId,
+    message,
+    search.conceptsOf(message).map((c) => c.stem).join(", "),
+    (answer.meta && answer.meta.topics ? answer.meta.topics : []).join("; "),
+    leadRef || "",
+    String(level) + (composed ? "g" : ""),
+    categoryOf(message),
+  ]);
+  try {
+    waitUntil(pendingLog);
+  } catch { /* non-Vercel run: the append still proceeds on its own */ }
+  return res.status(200).json({
+    chat: true,
+    reply,
+    leadRef,
+    leadTitle: leadRef ? `${leadRef} — ${translationName}` : null,
+    leadText: leadRef ? (fullByRef.has(leadRef) ? fullByRef.get(leadRef) : leadEntry ? leadEntry.text : null) : null,
+    supporting,
+    refs: orderedRefs,
+    passages: panel,
+    composed,
+    crisis,
+    logId,
+  });
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
     return res.status(405).json({ error: "Method not allowed" });
+  }
+  // Live-chat turns (see handleChatTurn above) share this endpoint and
+  // all of its machinery; the ask flow below is untouched by them.
+  if (req.body && req.body.chat === true) {
+    try {
+      return await handleChatTurn(req, res);
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: "Something went wrong. Please try again." });
+    }
   }
   try {
     const situation = String(req.body?.situation || "").trim().slice(0, 3000);
