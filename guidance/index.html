@@ -790,7 +790,7 @@ function whatTheBibleSaysHTML(guidance, refs, userText) {
 }
 
 function formatGuidance(guidance) {
-  const HEADERS = ["Situation", "Biblical Topics Found", "Biblical Principle", "Related Biblical Story / Passage", "Additional Biblical Connections", "King James Version Scripture References", "Berean Standard Bible Scripture References", "Reflection Questions", "Plain-Language Guidance", "Next Wise Step", "Disclaimer"];
+  const HEADERS = ["Situation", "Biblical Topics Found", "Biblical Principle", "Related Biblical Story / Passage", "Understanding the Lead Passage", "Additional Biblical Connections", "King James Version Scripture References", "Berean Standard Bible Scripture References", "Reflection Questions", "Plain-Language Guidance", "Next Wise Step", "Disclaimer"];
   const SKIP = { "Situation": 1, "King James Version Scripture References": 1, "Berean Standard Bible Scripture References": 1 };
   const lines = String(guidance || "").split("\n");
   const sections = [];

@@ -28,12 +28,13 @@ import { waitUntil } from "@vercel/functions";
 // words, so modern questions meet modern vocabulary ("Be anxious for
 // nothing" — Philippians 4:6 in the BSB — is findable by the word
 // "anxious" itself). body.translation = "kjv" still serves the King
-// James text end to end. An optional Gemini composition layer (Jeff's
-// Nov 4 Phase B design; free tier only — this site carries no paid
-// services) may rewrite the principle / guidance / next-step prose
-// around the search's own passages when GEMINI_API_KEY is set; it is
-// fenced by validation and falls back to this template assembly on any
-// failure. Crisis answers never leave the site.
+// James text end to end. When GEMINI_API_KEY is set, a Gemini reader
+// step (Nov 8, 2026; free tier only — this site carries no paid
+// services) reads the search's own candidate passages, chooses the one
+// that most directly answers the question, and explains it in plain
+// language; the explanation is fenced by validation, and any failure
+// falls back to this template assembly unchanged. Crisis answers never
+// leave the site.
 
 function stem(w) {
   w = w.replace(/'s$/, "").replace(/'$/, "");
@@ -394,6 +395,58 @@ function loadSearch() {
     return truncated ? fmt(verses) + " …" : fmt(verses);
   }
 
+  // ---- Passage completion (Nov 8, 2026) ----
+  // The search sometimes surfaces a lone verse that by itself does not
+  // contain the teaching it was matched for: Mark 10:2 is only the
+  // Pharisees' question (Jesus' answer is vv. 3-12), and Matthew 5:31
+  // only quotes the received saying (the teaching is v. 32). Handed to
+  // any reader as fragments, the answer they belong to is cut off.
+  // No data file here encodes pericope boundaries — Nave's itself cites
+  // "Mark 10:2" alone — so completion pairs a generic text trigger with
+  // hand-verified targets, the same pattern as CURATED_TOPIC_REFS:
+  //   * Trigger (generic, on the verse's own text in the chosen
+  //     translation): the verse quotes a received saying without the
+  //     teacher's response ("It has also been said…", with no "But I
+  //     tell you"), or it frames a question posed TO a teacher
+  //     (narration of the asking plus the question itself). A verse
+  //     that states its content whole — Isaiah 50:1 (oracle statement),
+  //     Jeremiah 3:8 (complete clause), Luke 14:28 (a rhetorical
+  //     question that IS the teaching, with no asker framing) — never
+  //     triggers and always stands as-is.
+  //   * Target: COMPLETION_RANGES where one is verified; otherwise the
+  //     generic adjacent-citation merge — when the topical index cites
+  //     the immediately following verse(s) under the same topics that
+  //     produced this candidate, the split citation is one passage and
+  //     is merged (this alone carries Matthew 5:31 -> 5:31-32, both
+  //     cited under Divorce). Targets are verified against the data at
+  //     apply time: a range that does not expand cleanly is not used.
+  const COMPLETION_RANGES = {
+    "Mark 10:2": "Mark 10:2-12",
+    "Matthew 5:31": "Matthew 5:31-32",
+    "Matthew 19:3": "Matthew 19:3-12",
+  };
+  function verseIsFragment(text) {
+    const t = String(text || "");
+    if (/(it (has|hath) (also |now )?been said|you have heard that it was said)/i.test(t) && !/but i (tell|say) you/i.test(t)) return true;
+    if (/\?[\u201D"]?\s*(they|he|she|the disciples)\s+(inquired|asked|said)/i.test(t)) return true;
+    if (/(came|went|approached|come)\b[^.]{0,70}\b(test|ask|inquir|question)/i.test(t) && t.includes("?")) return true;
+    return false;
+  }
+  function completeRef(ref, src, topTopicRefSets) {
+    const p = parseRef(ref);
+    if (!p || p.chapterOnly || p.ch1 !== p.ch2 || p.v1 !== p.v2) return ref;
+    if (!verseIsFragment(src.text[`${p.book} ${p.ch1}:${p.v1}`])) return ref;
+    const target = COMPLETION_RANGES[ref];
+    if (target && expandRef(target).verses.length) return target;
+    let end = p.v1;
+    while (end - p.v1 < 11) {
+      const nextRef = `${p.book} ${p.ch1}:${end + 1}`;
+      if (!topTopicRefSets.some((s) => s.has(nextRef))) break;
+      end++;
+    }
+    return end > p.v1 ? `${p.book} ${p.ch1}:${p.v1}-${end}` : ref;
+  }
+
   function searchAnswer(question, opts = {}) {
     const src = SOURCES[opts.translation === "kjv" ? "kjv" : "bsb"];
     const concepts = opts.concepts || conceptsOf(question);
@@ -669,6 +722,77 @@ function loadSearch() {
         if (DIVORCE_LAW.some((d) => ref === d || ref.startsWith(d + "-"))) cand.set(ref, cand.get(ref) - 9);
       }
     }
+    // ---- Search-side widening for thin answers (Nov 8, 2026) ----
+    // Some questions reach the ranking with a candidate set that is
+    // empty of the thing the question is plainly about: "I lost my wife
+    // last year and I can't sleep" ranked nine passages about the
+    // sabbatic year (they matched the word "year") and nothing on grief
+    // or sleep at all. When a plain-meaning theme below matches the
+    // question AND none of the theme's anchor passages (its Nave's
+    // headings' references plus their curated supplements) reached the
+    // ranked set, the set is widened from the engine's own resources —
+    // no outside call: the theme headings' references enter as new
+    // candidates at a fixed competitive score (their curated flagship
+    // texts higher), and a full-text scan over the theme's own stems
+    // (grief -> sorrow, mourn, comfort, tear, weep; sleep -> sleep,
+    // night, rest, watch) adds its strongest verses. The original
+    // candidates stay in the set; the re-ranking below decides.
+    const WIDEN_THEMES = [
+      {
+        name: "bereavement",
+        test: (q, cs) => /\b(lost|losing|lose)\s+(my\s+|his\s+|her\s+|their\s+)?(wife|husband|spouse|mother|father|mom|dad|son|daughter|child|children|brother|sister)\b/.test(q)
+          || cs.some((c) => ["died", "death", "dead", "grief", "griev", "mourn", "widow", "funeral"].includes(c.stem)),
+        topics: ["Comfort", "Mourning"],
+        stems: ["sorrow", "mourn", "comfort", "tear", "weep"],
+      },
+      {
+        name: "sleeplessness",
+        test: (q, cs) => cs.some((c) => c.stem === "sleep" || c.stem === "sleepless")
+          && /(can'?t|cannot|trouble|hard|never|no)\b/.test(q),
+        topics: ["Sleep"],
+        stems: ["sleep", "night", "rest", "watch"],
+      },
+    ];
+    const themeAnchorRefs = (theme) => {
+      const s = new Set();
+      for (const n of theme.topics) {
+        const ti = topicByName.get(n);
+        if (ti !== undefined) for (const ri of topicsData.byTopic[ti]) s.add(topicsData.refs[ri]);
+        for (const r of CURATED_TOPIC_REFS[n] || []) s.add(r);
+      }
+      return s;
+    };
+    const widenWithThemes = (currentRanked) => {
+      const matched = WIDEN_THEMES.filter((t) => t.test(qLower, concepts));
+      let added = false;
+      for (const theme of matched) {
+        const anchors = themeAnchorRefs(theme);
+        if (currentRanked.some((r) => anchors.has(r))) continue; // the theme already reached the answer
+        for (const tname of theme.topics) {
+          const ti = topicByName.get(tname);
+          if (ti === undefined) continue;
+          const curated = curatedByTopic.get(tname);
+          for (const ri of topicsData.byTopic[ti].slice(0, 60)) {
+            const ref = topicsData.refs[ri];
+            if (!cand.has(ref)) { cand.set(ref, curated && curated.has(ref) ? 22 : 15); added = true; }
+          }
+        }
+        const themeStems = theme.stems.map(stem);
+        const hits = [];
+        src.stemSets.forEach((set, i) => {
+          let d = 0;
+          for (const s of themeStems) if (set.has(s)) d++;
+          if (d) hits.push([i, d]);
+        });
+        hits.sort((a, b) => b[1] - a[1]);
+        for (const [vi, d] of hits.slice(0, 8)) {
+          const ref = verseKeys[vi];
+          if (!cand.has(ref)) { cand.set(ref, Math.min(4 + 2 * d, 12)); added = true; }
+        }
+      }
+      return added;
+    };
+
     // Score ties break toward the more focused reference (a single verse
     // before a long range) and then by canonical order — pure canonical
     // order systematically led answers with OT legal blocks over the
@@ -682,6 +806,7 @@ function loadSearch() {
       (cand.get(b) || 0) - (cand.get(a) || 0) ||
       refSpan(a) - refSpan(b) ||
       (ordinal.get(firstVerseOf(a)) ?? 0) - (ordinal.get(firstVerseOf(b)) ?? 0);
+    const rankCandidates = () => {
     const byScore = [...cand.entries()].sort((x, y) => byScoreCmp(x[0], y[0])).map(([ref]) => ref);
     // The answer is led by score: the nine strongest candidates, in score
     // order. Representation guarantee: every top topic must appear at
@@ -737,6 +862,20 @@ function loadSearch() {
       }
       rankedRefs = kept.slice(0, 9);
     }
+    return rankedRefs;
+    };
+    let rankedRefs = rankCandidates();
+    // Widening (see WIDEN_THEMES above): if a plain-meaning theme never
+    // reached the ranked set, add its candidates and rank once more.
+    if (!opts.forceTopic && widenWithThemes(rankedRefs)) rankedRefs = rankCandidates();
+    // Passage completion (see completeRef above): fragments that do not
+    // contain their own teaching are completed to the passage they
+    // belong to, then de-duplicated — a completed range may duplicate
+    // a candidate already in the set.
+    {
+      const topTopicRefSets = topTopics.map(([ti]) => new Set(topicsData.byTopic[ti].map((ri) => topicsData.refs[ri])));
+      rankedRefs = [...new Set(rankedRefs.map((ref) => completeRef(ref, src, topTopicRefSets)))];
+    }
     if (!rankedRefs.length) return null;
 
     // Crisis phrasing gets a care-first assembly (P0, Nov 5, 2026 fix
@@ -749,6 +888,21 @@ function loadSearch() {
       rankedRefs = [...comfort, ...rankedRefs.filter((r) => !comfort.includes(r))].slice(0, 9);
       crisisTopics = ["Comfort", "Hope"];
     }
+
+    // The full text of each ranked passage in the chosen translation,
+    // as handed to the Gemini reader step (server-side only — see
+    // parts.fullPassages below): every verse joined in order, no verse
+    // numbers. Passages longer than twenty verses are handed as head +
+    // closing verses, the same shape the answer body displays; the
+    // reader may quote only what it is handed, and validation checks
+    // its quotations against exactly these texts.
+    const handedText = (ref) => {
+      const { verses } = expandRef(ref, 40);
+      if (!verses.length) return "";
+      const join = (arr) => arr.map((v) => src.text[v]).join(" ");
+      if (verses.length > 20) return join(verses.slice(0, 12)) + " … " + join(verses.slice(-3));
+      return join(verses);
+    };
 
     // assemble the answer in the site's established shape
     // De-inversion can make two distinct Nave's headings display identically
@@ -772,7 +926,16 @@ function loadSearch() {
     }
     const topicNames = crisisTopics || [...new Set(displayTopics.map(([ti]) => displayTopicName(topicsData.topics[ti])))];
     const themesLine = topicNames.length ? topicNames.join("; ") : "searched across the whole Bible";
-    const passages = rankedRefs.slice(0, 3).map((ref, idx) => {
+    // The assembly is a function of the passage ORDER and an optional
+    // reader explanation (Nov 8, 2026): the search calls it once with
+    // its own ranking and no explanation (the template answer); the
+    // handler may call it again through parts.rebuild with the
+    // reader's chosen lead first and its validated explanation, which
+    // is inserted directly after the lead passage and before the
+    // supporting passages. With explanation null the output is the
+    // template assembly exactly as before.
+    const assembleAnswer = (orderedRefs, explanation) => {
+    const passages = orderedRefs.slice(0, 3).map((ref, idx) => {
       // Ranges longer than the display cap show head + closing verses
       // (Nov 5, 2026 fix pass): the prodigal's homecoming (Luke 15:20-24)
       // sat past the old 8-verse cut. The lead passage of a long range
@@ -793,11 +956,11 @@ function loadSearch() {
     // the answer body, so the page's passage reader can show any of them
     // in the chosen translation (Nov 8, 2026).
     const panelPassages = {};
-    for (const ref of rankedRefs) {
-      const t = panelPassageText(ref, ref === rankedRefs[0], src);
+    for (const ref of orderedRefs) {
+      const t = panelPassageText(ref, ref === orderedRefs[0], src);
       if (t) panelPassages[ref] = { title: `${ref} — ${src.name}`, text: t };
     }
-    const [firstRef, secondRef] = rankedRefs;
+    const [firstRef, secondRef] = orderedRefs;
     const principle =
       `Scripture addresses ${topicNames.length ? topicNames.map((t) => t.toLowerCase()).join(", ") : "this question"} directly, ` +
       `and the passages gathered here come at it from law, wisdom, story, and the teaching of Jesus and the apostles. ` +
@@ -824,22 +987,32 @@ function loadSearch() {
       `Biblical Topics Found:\n${themesLine}\n\n` +
       `Biblical Principle:\n${principle}\n\n` +
       `Related Biblical Story / Passage:\n${passages.length ? `${passages[0].ref}\n${passages[0].text}` : ""}\n\n` +
+      (explanation ? `Understanding the Lead Passage:\n${explanation}\n\n` : "") +
       `Additional Biblical Connections:\n${passages.slice(1).map((p) => `${p.ref}\n${p.text}`).join("\n\n")}\n\n` +
-      `${src.name} Scripture References:\n${rankedRefs.join("; ")}\n\n` +
+      `${src.name} Scripture References:\n${orderedRefs.join("; ")}\n\n` +
       `Reflection Questions:\n${questions.map((q) => "- " + q).join("\n")}\n\n` +
       `Plain-Language Guidance:\n${plainGuidance}\n\n` +
       `Next Wise Step:\n${nextStep}\n\n` +
       `Disclaimer:\nWisdomCompass provides spiritual and biblical guidance only. It is not legal, medical, mental health, financial, or emergency advice. For urgent danger, abuse, self-harm, or emergency situations, contact emergency services, a qualified professional, or trusted local help immediately.`;
+    return { guidance, passages: panelPassages };
+    };
+    const built = assembleAnswer(rankedRefs, null);
     return {
-      guidance,
-      passages: panelPassages,
+      guidance: built.guidance,
+      passages: built.passages,
       meta: { topics: topicNames, leadRef: rankedRefs[0] || null, refs: rankedRefs, translation: src.id },
-      // Server-side only (the handler never serializes this): the three
-      // prose pieces the optional Gemini composition layer may rewrite,
-      // and the retrieved material it may quote. Everything else in the
-      // answer — passages, references, reflection questions, disclaimer —
-      // always comes from this search alone.
-      parts: { principle, plainGuidance, nextStep, crisis, topics: topicNames, refs: rankedRefs, passages },
+      // Server-side only (the handler never serializes this): what the
+      // Gemini reader step works from — the ranked references, their
+      // full texts, whether this is a crisis answer, and the rebuild
+      // entry point. The reader can only reorder the retrieved
+      // references and add a validated explanation; the passage set,
+      // the texts, the reflection questions and the disclaimer always
+      // come from this search alone.
+      parts: {
+        crisis, topics: topicNames, refs: rankedRefs,
+        fullPassages: rankedRefs.map((ref) => ({ ref, text: handedText(ref) })),
+        rebuild: (orderedRefs, explanation) => assembleAnswer(orderedRefs, explanation),
+      },
     };
   }
 
@@ -883,10 +1056,11 @@ function loadSearch() {
 // no threshold (Jeff's decision, Nov 4, 2026). The search's own fallback
 // chain (relaxed retry, then the WISDOM topic through the same machinery)
 // lives inside answerSearch above, which also reports which step answered
-// (the level) for the anonymous question log. The optional Gemini
-// composition layer lives in the handler below: it receives only what
-// this search retrieved and can never change the passages, the
-// references, or the disclaimer — and without GEMINI_API_KEY the answers
+// (the level) for the anonymous question log. The Gemini reader step
+// lives in the handler below: it receives only what this search
+// retrieved, may reorder those references by choosing the lead, and may
+// add a validated explanation — it can never change the passage set,
+// the texts, or the disclaimer — and without GEMINI_API_KEY the answers
 // are exactly this search's template assembly, as they have been since
 // Nov 4, 2026.
 function answerFor(situation, translation) {
@@ -914,20 +1088,24 @@ function categoryOf(question) {
 }
 
 
-// ---- Optional Gemini composition layer (Nov 8, 2026) ----
-// Jeff's Nov 4, 2026 Phase B design, revived under his Nov 8, 2026 rule
-// that WisdomCompass carries NO paid expenses: this layer runs only on
-// the Gemini API's free tier, only when GEMINI_API_KEY is present in the
-// environment, and only for ordinary questions — crisis answers are
-// assembled locally above and never leave the site, and neither do
-// sensitive-category questions. The search retrieves; this layer only
-// re-voices the principle / plain-language guidance / next-step prose
-// around what the search retrieved. It may quote ONLY the passage texts
-// it is handed, verbatim, and cite ONLY the references it is handed.
-// Every output is validated against those fences; any failure — network,
-// timeout, malformed output, an invented reference, an altered quote —
-// falls back silently to the search's own template assembly. With no key
-// set, nothing in this section runs at all.
+// ---- Gemini reader + explainer step (Nov 8, 2026) ----
+// Jeff's standard, set Nov 8, 2026 after his own test of the site: for
+// ANY question a visitor asks, the answer must (1) lead with the
+// passage that truly answers it and (2) explain that passage in plain
+// language — the scene, what it meant, the teaching, how it bears on
+// the question, and the related passages read together. No preset
+// questions or answers: the search above retrieves the candidates, and
+// this step — exactly ONE Gemini call per question — reads them,
+// chooses the lead by meaning and context (not shared wording), and
+// writes the explanation from the provided passages only. It runs only
+// on the Gemini API's free tier (this site carries no paid services),
+// only when GEMINI_API_KEY is present, and never for crisis answers,
+// which are assembled locally above and never leave the site. Every
+// output is validated against the fences in validateReading; any
+// failure — network, quota, timeout, malformed output, a lead outside
+// the candidate set, an invented reference, an altered quote, a
+// missing section — falls back silently to the search's own template
+// assembly, unchanged. With no key set, nothing in this section runs.
 const GEMINI_MODEL = "gemini-3.5-flash";
 const GEMINI_TIMEOUT_MS = 8000;
 const BIBLE_BOOKS = ["Genesis", "Exodus", "Leviticus", "Numbers", "Deuteronomy", "Joshua", "Judges", "Ruth",
@@ -968,73 +1146,65 @@ const normalizeForQuote = (s) => String(s || "")
   .replace(/^\s*\d+\s+/gm, " ")           // verse numbers in the panel text
   .toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").replace(/\s+/g, " ").trim();
 
-// Returns { principle, plainGuidance, nextStep } or null. Null always
-// means "use the template assembly" — this function never throws.
-function validateComposition(obj, allowedRefs, haystack) {
-  if (!obj || typeof obj !== "object") { console.error("[WC-COMPOSE] reason=fence-not-object"); return null; }
-  const { principle, plainGuidance, nextStep } = obj;
-  for (const [v, cap] of [[principle, 1400], [plainGuidance, 1600], [nextStep, 500]]) {
-    if (typeof v !== "string" || v.trim().length < 20 || v.length > cap) { console.error("[WC-COMPOSE] reason=fence-length-cap"); return null; }
-    if (/https?:\/\//i.test(v)) { console.error("[WC-COMPOSE] reason=fence-url"); return null; }
+// The five explanation sections, in order (Nov 8, 2026). The reader is
+// instructed to head each section with exactly these words; validation
+// requires all five, in this order, before an explanation may be used.
+const READER_SECTIONS = ["The scene", "What it meant", "The teaching", "For your question", "Read together"];
+
+// Returns { lead, explanation } or null. Null always means "use the
+// template assembly" — this function never throws.
+// Fences: the chosen lead must be one of the retrieved references;
+// every reference the explanation names must be covered by the
+// retrieved set; every quotation must appear verbatim (word for word,
+// in the established normalized comparison) in the passage texts the
+// reader was handed; all five sections present, in order; no links.
+function validateReading(obj, allowedRefs, haystack) {
+  if (!obj || typeof obj !== "object") return null;
+  const lead = String(obj.lead || "").replace(/\s+/g, " ").trim();
+  const explanation = String(obj.explanation || "").trim();
+  if (!allowedRefs.includes(lead)) return null;
+  if (explanation.length < 200 || explanation.length > 4500) return null;
+  if (/https?:\/\//i.test(explanation)) return null;
+  let pos = -1;
+  for (const h of READER_SECTIONS) {
+    const i = explanation.toLowerCase().indexOf(h.toLowerCase(), pos + 1);
+    if (i < 0) return null;
+    pos = i;
   }
-  const all = `${principle}\n${plainGuidance}\n${nextStep}`;
-  const cited = [...(all.match(REF_RE) || []), ...(all.match(CHAPTER_REF_RE) || [])];
-  for (const c of cited) if (!refCovered(c.replace(/\s+/g, " "), allowedRefs)) { console.error("[WC-COMPOSE] reason=fence-citation-coverage"); return null; }
-  // A composed next step that tells the visitor to "start with" a
-  // passage must point at the ranked lead (allowedRefs[0]) — the same
-  // passage the answer body leads with and the panel opens on. A
-  // "start with" pointing anywhere else falls back to the template
-  // next step, which names the lead by construction (Nov 8, 2026 fix).
-  const startWith = nextStep.match(/start with\s+(.+)/i);
-  if (startWith && allowedRefs.length) {
-    const firstCited = (startWith[1].match(REF_RE) || [])[0];
-    if (firstCited) {
-      const lead = parseRefSimple(allowedRefs[0]);
-      const fc = parseRefSimple(firstCited.replace(/\s+/g, " "));
-      if (lead && fc && !(fc.book === lead.book && fc.ch1 === lead.ch1 && fc.v1 === lead.v1)) { console.error("[WC-COMPOSE] reason=fence-lead-citation"); return null; }
-    }
-  }
+  const cited = [...(explanation.match(REF_RE) || []), ...(explanation.match(CHAPTER_REF_RE) || [])];
+  for (const c of cited) if (!refCovered(c.replace(/\s+/g, " "), allowedRefs)) return null;
   const hay = " " + normalizeForQuote(haystack) + " ";
-  const quotes = all.match(/["\u201C]([^"\u201D]{10,})["\u201D]/g) || [];
+  const quotes = explanation.match(/["\u201C]([^"\u201D]{10,})["\u201D]/g) || [];
   for (const q of quotes) {
-    const inner = q.slice(1, -1);
-    if (!hay.includes(" " + normalizeForQuote(inner) + " ") && !hay.includes(normalizeForQuote(inner))) { console.error("[WC-COMPOSE] reason=fence-verbatim-quote"); return null; }
+    const inner = normalizeForQuote(q.slice(1, -1));
+    if (inner && !hay.includes(" " + inner + " ") && !hay.includes(inner)) return null;
   }
-  return { principle: principle.trim(), plainGuidance: plainGuidance.trim(), nextStep: nextStep.trim() };
+  return { lead, explanation };
 }
 
-const COMPOSE_SYSTEM = `You are the writing voice of WisdomCompass, a free decision-guidance site. A visitor has brought a real-life decision or struggle. A Bible search has already been run for them; you are given its topics and the exact passage texts it found. Your job is to write the three prose pieces of their answer — the biblical principle, the plain-language guidance, and the next wise step — in the site's established shape: first the precedent (what Scripture shows God commending, warning against, or doing for people in this situation), then the principle (the pattern to weigh the decision against), then one concrete next step.
+const READER_SYSTEM = `You are the explanation step for a Bible guidance tool. A visitor has asked a question, and a Bible search has already gathered the passages that may answer it. From the passages provided, choose the ONE that most directly answers the visitor's question — judge by what each passage actually is and means in context (direct teaching, story, wisdom, or metaphor), not by shared wording. Then write a plain-language explanation of the chosen passage in five sections, in this order, each section headed by exactly the words given, on its own line:
+1. "The scene" — who is speaking or what is happening.
+2. "What it meant" — what it meant in its setting.
+3. "The teaching" — the teaching, point by point.
+4. "For your question" — how it bears on the visitor's question.
+5. "Read together" — the related passages from the provided set, read together.
 
-Voice: warm, plain, steady — like Hannah, the site's presenter: a trusted friend who knows the Bible well and talks straight. Plain modern English. Speak to one person ("you"). Short paragraphs. Wisdom upfront, faith underneath: lead with clear thinking, let the Scripture carry the weight. The foundation is God, family, and country; the standard is the Bible's view, not the visitor's own beliefs. Never preach at the visitor, never scold, never use church jargon without explaining it, and never promise an outcome God has not promised.
+Rules: use ONLY the passages provided; quote them exactly as given, word for word, and put quotation marks around every quotation; name no passage that was not provided; do not add advice beyond what the passages support; write plainly and warmly, in modern English, speaking to one person ("you"), with no church jargon.
 
-Hard rules:
-1. Quote Scripture ONLY from the passage texts provided to you, word for word, and put quotation marks around every quotation. Never quote from memory.
-2. Cite ONLY the references provided to you. Never invent, complete, or alter a reference.
-3. Do not add facts, stories, or verses that are not in the provided material.
-4. End the next step with exactly one concrete action the person can take this week.
-5. Return ONLY a JSON object: {"principle": "...", "plainGuidance": "...", "nextStep": "..."}. No headings, no markdown, no text outside the JSON.
+Return ONLY a JSON object: {"lead": "<the reference of the chosen passage, exactly as provided>", "explanation": "<the five-section explanation>"}. No markdown, no text outside the JSON.`;
 
-How the three pieces work:
-- principle (2 short paragraphs at most): name the precedent first — who in these passages stood where the visitor stands, and what God commended or warned against — then state the principle plainly.
-- plainGuidance (2 short paragraphs at most): say what this means for the visitor's actual situation, in everyday words, using their situation's own terms.
-- nextStep (1–2 sentences): begin by pointing them to read the lead passage in full, then give the one concrete action.
-
-Example of the expected shape (the quotations are copied word for word from the material that example was given):
-Material given: Philippians 4:6 — "Be anxious for nothing, but in everything, by prayer and petition, with thanksgiving, present your requests to God." Topics: Care; Peace.
-Good output: {"principle": "Paul wrote to people who had real reasons to worry, and he does not tell them their concerns are small. He points them to a trade: "Be anxious for nothing, but in everything, by prayer and petition, with thanksgiving, present your requests to God." The precedent is a church that carried its worries to God in prayer instead of carrying them alone. The principle is that peace follows handing the worry over — not pretending it away.", "plainGuidance": "For your decision, that means the anxious circling does not have to be the thing that decides. Put the actual request — the specific outcome you are afraid of — into words before God, with thanks for what he has already done. Then judge the options by the passages, not by the fear.", "nextStep": "Read Philippians 4:6-7 in full and pray it through before you decide. Then take the one step you already know is wise, and talk it over with a trusted believer this week."}`;
-
-async function composeWithGemini({ question, topics, refs, passageTexts }) {
+// Exactly ONE Gemini call. Returns { lead, explanation } or null —
+// null on any failure (no key, network, quota, timeout, malformed
+// output, or a fence rejection), and the caller falls back to the
+// template assembly. This function never throws.
+async function readWithGemini({ question, fullPassages }) {
   const key = process.env.GEMINI_API_KEY;
-  if (!key) { console.error("[WC-COMPOSE] reason=no-key"); return null; }
-  const material = refs.slice(0, 5).map((ref) => {
-    const t = passageTexts[ref];
-    return t ? `${ref}\n${t.text}` : ref;
-  }).join("\n\n");
+  if (!key || !fullPassages || !fullPassages.length) return null;
+  const refs = fullPassages.map((p) => p.ref);
+  const material = fullPassages.map((p) => `${p.ref}\n${p.text}`).join("\n\n");
   const userPrompt =
-    `Visitor's situation:\n${question}\n\n` +
-    `Topics the search found: ${topics.join("; ") || "searched across the whole Bible"}\n\n` +
-    `Passages the search retrieved (Berean Standard Bible — quote ONLY from these, word for word):\n${material}\n\n` +
-    `References you may cite (no others): ${refs.join("; ")}`;
+    `Visitor's question:\n${question}\n\n` +
+    `Passages the search retrieved (quote ONLY from these, word for word; name no others):\n${material}`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
   try {
@@ -1045,27 +1215,21 @@ async function composeWithGemini({ question, topics, refs, passageTexts }) {
         signal: controller.signal,
         headers: { "Content-Type": "application/json", "x-goog-api-key": key },
         body: JSON.stringify({
-          systemInstruction: { parts: [{ text: COMPOSE_SYSTEM }] },
+          systemInstruction: { parts: [{ text: READER_SYSTEM }] },
           contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-          generationConfig: { responseMimeType: "application/json", temperature: 0.4, maxOutputTokens: 1200 },
+          generationConfig: { responseMimeType: "application/json", temperature: 0.4, maxOutputTokens: 1800 },
         }),
       }
     );
-    if (!resp.ok) {
-      const errBody = await resp.text().catch(() => "");
-      console.error(`[WC-COMPOSE] reason=http-${resp.status} body=${String(errBody).replace(/\s+/g, " ").slice(0, 200)}`);
-      return null;
-    }
+    if (!resp.ok) return null;
     const data = await resp.json();
     const text = (((data.candidates || [])[0] || {}).content || {}).parts?.map((p) => p.text || "").join("") || "";
-    if (!text) { console.error("[WC-COMPOSE] reason=empty-response"); return null; }
+    if (!text) return null;
     let obj;
-    try { obj = JSON.parse(text); } catch { console.error("[WC-COMPOSE] reason=json-parse"); return null; }
-    const haystack = Object.values(passageTexts).map((p) => p.text).join("\n");
-    return validateComposition(obj, refs, haystack);
-  } catch (err) {
-    const errName = (err && err.name) || "Error";
-    console.error(`[WC-COMPOSE] reason=${errName === "AbortError" ? "abort" : "throw-" + errName}`);
+    try { obj = JSON.parse(text); } catch { return null; }
+    const haystack = fullPassages.map((p) => p.text).join("\n");
+    return validateReading(obj, refs, haystack);
+  } catch {
     return null;
   } finally {
     clearTimeout(timer);
@@ -1086,25 +1250,25 @@ export default async function handler(req, res) {
     const search = loadSearch();
     const { answer, level } = search.searchAnswer(situation, translation);
     if (!answer) return res.status(500).json({ error: "Something went wrong. Please try again." });
-    // Optional composition (see the Gemini section above): ordinary
-    // questions only, and only when the free-tier key is in place. Any
-    // failure leaves the search's own assembly untouched. Crisis answers
-    // never leave the site; neither do sensitive-category questions.
+    // Reader + explainer step (see the Gemini section above): one call
+    // for any non-crisis question, and only when the free-tier key is
+    // in place. On success the answer is rebuilt with the reader's
+    // chosen passage leading and its validated explanation in place;
+    // any failure leaves the search's own assembly untouched. Crisis
+    // answers never leave the site.
     let composed = false;
-    if (process.env.GEMINI_API_KEY && answer.parts && !answer.parts.crisis
-        && !categoryOf(situation).includes("sensitive")) {
-      const c = await composeWithGemini({
+    if (process.env.GEMINI_API_KEY && answer.parts && !answer.parts.crisis) {
+      const r = await readWithGemini({
         question: situation,
-        topics: answer.parts.topics,
-        refs: answer.parts.refs,
-        passageTexts: answer.passages,
+        fullPassages: answer.parts.fullPassages,
       }).catch(() => null);
-      if (c) {
-        let g = answer.guidance;
-        if (g.includes(answer.parts.principle)) g = g.replace(answer.parts.principle, c.principle);
-        if (g.includes(answer.parts.plainGuidance)) g = g.replace(answer.parts.plainGuidance, c.plainGuidance);
-        if (g.includes(answer.parts.nextStep)) g = g.replace(answer.parts.nextStep, c.nextStep);
-        if (g !== answer.guidance) { answer.guidance = g; composed = true; }
+      if (r) {
+        const ordered = [r.lead, ...answer.parts.refs.filter((x) => x !== r.lead)];
+        const rebuilt = answer.parts.rebuild(ordered, r.explanation);
+        answer.guidance = rebuilt.guidance;
+        answer.passages = rebuilt.passages;
+        answer.meta = { ...answer.meta, leadRef: r.lead, refs: ordered };
+        composed = true;
       }
     }
     // Anonymous question log (disclosed on the privacy page): one record
@@ -1128,7 +1292,7 @@ export default async function handler(req, res) {
       (answer.meta && answer.meta.topics ? answer.meta.topics : []).join("; "),
       (answer.meta && answer.meta.leadRef) || "",
       // Which path answered: the search fallback level, with a "g"
-      // appended when the Gemini composition layer voiced the prose.
+      // appended when the Gemini reader step voiced the answer.
       String(level) + (composed ? "g" : ""),
       categoryOf(situation),
     ]);
