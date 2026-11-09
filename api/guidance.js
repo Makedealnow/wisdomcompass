@@ -928,7 +928,7 @@ function categoryOf(question) {
 // timeout, malformed output, an invented reference, an altered quote —
 // falls back silently to the search's own template assembly. With no key
 // set, nothing in this section runs at all.
-const GEMINI_MODEL = "gemini-2.5-flash";
+const GEMINI_MODEL = "gemini-3.5-flash";
 const GEMINI_TIMEOUT_MS = 8000;
 const BIBLE_BOOKS = ["Genesis", "Exodus", "Leviticus", "Numbers", "Deuteronomy", "Joshua", "Judges", "Ruth",
   "1 Samuel", "2 Samuel", "1 Kings", "2 Kings", "1 Chronicles", "2 Chronicles", "Ezra", "Nehemiah", "Esther",
