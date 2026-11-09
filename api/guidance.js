@@ -1159,6 +1159,30 @@ const normalizeForQuote = (s) => String(s || "")
 // requires all five, in this order, before an explanation may be used.
 const READER_SECTIONS = ["The scene", "What it meant", "The teaching", "For your question", "Read together"];
 
+// Quoted spans are extracted by pairing the double-quote marks in
+// order — first mark opens, next closes, and so on — and EVERY span
+// is checked, however short. (Nov 9, 2026 fix: the old extraction
+// only recognized spans of 10+ characters, so a short genuine quote
+// — "one flesh", 9 characters — was never extracted; its closing
+// mark was then read as an opener and the prose after it became a
+// phantom "quotation" that failed the verbatim check, rejecting
+// sound readings. That was the second deterministic reason composed
+// stayed false in production.) Apostrophes, straight or curly, are
+// never quote marks here, so contractions and possessives inside or
+// outside a span do not disturb the pairing.
+function extractQuotedSpans(text) {
+  const spans = [];
+  let open = -1;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === '"' || ch === "\u201C" || ch === "\u201D") {
+      if (open < 0) open = i;
+      else { spans.push(text.slice(open + 1, i)); open = -1; }
+    }
+  }
+  return spans;
+}
+
 // Returns { lead, explanation } or null. Null always means "use the
 // template assembly" — this function never throws.
 // Fences: the chosen lead must be one of the retrieved references;
@@ -1182,10 +1206,14 @@ function validateReading(obj, allowedRefs, haystack) {
   const cited = [...(explanation.match(REF_RE) || []), ...(explanation.match(CHAPTER_REF_RE) || [])];
   for (const c of cited) if (!refCovered(c.replace(/\s+/g, " "), allowedRefs)) return null;
   const hay = " " + normalizeForQuote(haystack) + " ";
-  const quotes = explanation.match(/["\u201C]([^"\u201D]{10,})["\u201D]/g) || [];
-  for (const q of quotes) {
-    const inner = normalizeForQuote(q.slice(1, -1));
-    if (inner && !hay.includes(" " + inner + " ") && !hay.includes(inner)) return null;
+  for (const q of extractQuotedSpans(explanation)) {
+    const inner = normalizeForQuote(q);
+    if (inner && !hay.includes(" " + inner + " ") && !hay.includes(inner)) {
+      // Sub-reason for the logs: the callers report class "fences";
+      // this line says it was the verbatim quote check that failed.
+      console.log("[WC-READER] fail fences-quote");
+      return null;
+    }
   }
   return { lead, explanation };
 }
