@@ -971,15 +971,15 @@ const normalizeForQuote = (s) => String(s || "")
 // Returns { principle, plainGuidance, nextStep } or null. Null always
 // means "use the template assembly" — this function never throws.
 function validateComposition(obj, allowedRefs, haystack) {
-  if (!obj || typeof obj !== "object") return null;
+  if (!obj || typeof obj !== "object") { console.error("[WC-COMPOSE] reason=fence-not-object"); return null; }
   const { principle, plainGuidance, nextStep } = obj;
   for (const [v, cap] of [[principle, 1400], [plainGuidance, 1600], [nextStep, 500]]) {
-    if (typeof v !== "string" || v.trim().length < 20 || v.length > cap) return null;
-    if (/https?:\/\//i.test(v)) return null;
+    if (typeof v !== "string" || v.trim().length < 20 || v.length > cap) { console.error("[WC-COMPOSE] reason=fence-length-cap"); return null; }
+    if (/https?:\/\//i.test(v)) { console.error("[WC-COMPOSE] reason=fence-url"); return null; }
   }
   const all = `${principle}\n${plainGuidance}\n${nextStep}`;
   const cited = [...(all.match(REF_RE) || []), ...(all.match(CHAPTER_REF_RE) || [])];
-  for (const c of cited) if (!refCovered(c.replace(/\s+/g, " "), allowedRefs)) return null;
+  for (const c of cited) if (!refCovered(c.replace(/\s+/g, " "), allowedRefs)) { console.error("[WC-COMPOSE] reason=fence-citation-coverage"); return null; }
   // A composed next step that tells the visitor to "start with" a
   // passage must point at the ranked lead (allowedRefs[0]) — the same
   // passage the answer body leads with and the panel opens on. A
@@ -991,14 +991,14 @@ function validateComposition(obj, allowedRefs, haystack) {
     if (firstCited) {
       const lead = parseRefSimple(allowedRefs[0]);
       const fc = parseRefSimple(firstCited.replace(/\s+/g, " "));
-      if (lead && fc && !(fc.book === lead.book && fc.ch1 === lead.ch1 && fc.v1 === lead.v1)) return null;
+      if (lead && fc && !(fc.book === lead.book && fc.ch1 === lead.ch1 && fc.v1 === lead.v1)) { console.error("[WC-COMPOSE] reason=fence-lead-citation"); return null; }
     }
   }
   const hay = " " + normalizeForQuote(haystack) + " ";
   const quotes = all.match(/["\u201C]([^"\u201D]{10,})["\u201D]/g) || [];
   for (const q of quotes) {
     const inner = q.slice(1, -1);
-    if (!hay.includes(" " + normalizeForQuote(inner) + " ") && !hay.includes(normalizeForQuote(inner))) return null;
+    if (!hay.includes(" " + normalizeForQuote(inner) + " ") && !hay.includes(normalizeForQuote(inner))) { console.error("[WC-COMPOSE] reason=fence-verbatim-quote"); return null; }
   }
   return { principle: principle.trim(), plainGuidance: plainGuidance.trim(), nextStep: nextStep.trim() };
 }
@@ -1025,7 +1025,7 @@ Good output: {"principle": "Paul wrote to people who had real reasons to worry, 
 
 async function composeWithGemini({ question, topics, refs, passageTexts }) {
   const key = process.env.GEMINI_API_KEY;
-  if (!key) return null;
+  if (!key) { console.error("[WC-COMPOSE] reason=no-key"); return null; }
   const material = refs.slice(0, 5).map((ref) => {
     const t = passageTexts[ref];
     return t ? `${ref}\n${t.text}` : ref;
@@ -1051,15 +1051,21 @@ async function composeWithGemini({ question, topics, refs, passageTexts }) {
         }),
       }
     );
-    if (!resp.ok) return null;
+    if (!resp.ok) {
+      const errBody = await resp.text().catch(() => "");
+      console.error(`[WC-COMPOSE] reason=http-${resp.status} body=${String(errBody).replace(/\s+/g, " ").slice(0, 200)}`);
+      return null;
+    }
     const data = await resp.json();
     const text = (((data.candidates || [])[0] || {}).content || {}).parts?.map((p) => p.text || "").join("") || "";
-    if (!text) return null;
+    if (!text) { console.error("[WC-COMPOSE] reason=empty-response"); return null; }
     let obj;
-    try { obj = JSON.parse(text); } catch { return null; }
+    try { obj = JSON.parse(text); } catch { console.error("[WC-COMPOSE] reason=json-parse"); return null; }
     const haystack = Object.values(passageTexts).map((p) => p.text).join("\n");
     return validateComposition(obj, refs, haystack);
-  } catch {
+  } catch (err) {
+    const errName = (err && err.name) || "Error";
+    console.error(`[WC-COMPOSE] reason=${errName === "AbortError" ? "abort" : "throw-" + errName}`);
     return null;
   } finally {
     clearTimeout(timer);
