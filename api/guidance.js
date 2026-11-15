@@ -1336,7 +1336,7 @@ How to answer:
 - Length: a few short paragraphs is the default (roughly 80–220 words). A simple factual question gets a short answer — a sentence or two can be plenty. Go longer only when the visitor's situation truly needs it. Ending with one gentle question back to them is welcome when it fits; don't force it.
 - The passages marked as from earlier in this conversation are still open on the table — when the visitor's message is really about one of those, answer from it.
 
-Rules (absolute): use ONLY the passages provided in this request; quote them exactly as given, word for word, and put quotation marks around every quotation — quotation marks are ONLY for words quoted from the passages, never for emphasis, never for the visitor's words, and never around your own phrases; name no passage that was not provided; never quote Scripture from memory; if the provided passages only partly cover the question, say so honestly and answer from what is there; do not add advice beyond what the passages support.
+Rules (absolute): use ONLY the passages provided in this request; quote them exactly as given, word for word, and put quotation marks around every quotation — quotation marks are ONLY for words quoted from the passages, never for emphasis, never for the visitor's words, and never around your own phrases; name no passage that was not provided; never quote Scripture from memory — even when a passage you know from elsewhere seems more fitting, work only with what is in front of you, and if the provided passages cover only part of the question, answer the part they cover and honestly say the rest is not in what you were given; do not add advice beyond what the passages support.
 
 Return ONLY a JSON object: {"lead": "<the reference of the passage your answer leans on most, exactly as provided>", "reply": "<your conversational reply>"}. No markdown, no text outside the JSON.`;
 
@@ -1386,11 +1386,13 @@ function validateChatReading(obj, allowedRefs, haystack, { allowNoLead = false }
   return { lead, reply };
 }
 
-// The chat composer step: one fenced Gemini call (free tier), the
+// The chat composer step: a fenced Gemini call (free tier), the
 // conversation carried as context, this turn's retrieved passages
 // plus any earlier lead passages still under discussion as the only
-// quotable material. Returns { lead, reply } or null; null always
-// means "use the template reply". This function never throws.
+// quotable material — with ONE corrective retry when the first
+// attempt fails the fences or the transport. Returns { lead, reply }
+// or null; null always means "use the template reply". This function
+// never throws.
 async function readChatWithGemini({ message, history, fullPassages, earlierPassages = [], smallTalk = false }) {
   const key = process.env.GEMINI_API_KEY;
   if (!key || !fullPassages || !fullPassages.length) { console.log("[WC-CHAT] fail no-key-or-passages"); return null; }
@@ -1413,39 +1415,59 @@ async function readChatWithGemini({ message, history, fullPassages, earlierPassa
       ? `This message is small talk — a greeting, thanks, or farewell, not a question. Reply briefly and warmly, like a person: a sentence or two, and if it fits, invite them to share what's on their mind. Do NOT explain a passage, do NOT quote or name any Scripture. Return {"lead": null, "reply": "<your brief reply>"}.\n\n`
       : "") +
     `Passages the search retrieved for this message (quote ONLY from these and the earlier passages below, word for word; name no others):\n${material}${earlier}`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
-  try {
-    const resp = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
-      {
-        method: "POST",
-        signal: controller.signal,
-        headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: CHAT_SYSTEM }] },
-          contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-          generationConfig: { responseMimeType: "application/json", temperature: 0.4, maxOutputTokens: 8192, thinkingConfig: { thinkingBudget: 1024 } },
-        }),
-      }
-    );
-    if (!resp.ok) { console.log(`[WC-CHAT] fail http-${resp.status}`); return null; }
-    const data = await resp.json();
-    const text = (((data.candidates || [])[0] || {}).content || {}).parts?.map((p) => p.text || "").join("") || "";
-    if (!text) { console.log("[WC-CHAT] fail empty"); return null; }
-    let obj;
-    try { obj = JSON.parse(text); } catch { console.log("[WC-CHAT] fail bad-json"); return null; }
-    const haystack = all.map((p) => p.text).join("\n");
-    const reading = validateChatReading(obj, refs, haystack, { allowNoLead: smallTalk });
-    if (!reading) { console.log("[WC-CHAT] fail fences"); return null; }
-    console.log("[WC-CHAT] ok");
-    return reading;
-  } catch (err) {
-    console.log(`[WC-CHAT] fail ${err && err.name === "AbortError" ? "timeout" : "network"}`);
-    return null;
-  } finally {
-    clearTimeout(timer);
+  const haystack = all.map((p) => p.text).join("\n");
+  // One attempt: a single fenced Gemini call for the given prompt.
+  // Returns the validated { lead, reply } or null on any failure.
+  const attempt = async (promptText) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
+    try {
+      const resp = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
+        {
+          method: "POST",
+          signal: controller.signal,
+          headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: CHAT_SYSTEM }] },
+            contents: [{ role: "user", parts: [{ text: promptText }] }],
+            generationConfig: { responseMimeType: "application/json", temperature: 0.4, maxOutputTokens: 8192, thinkingConfig: { thinkingBudget: 1024 } },
+          }),
+        }
+      );
+      if (!resp.ok) { console.log(`[WC-CHAT] fail http-${resp.status}`); return null; }
+      const data = await resp.json();
+      const text = (((data.candidates || [])[0] || {}).content || {}).parts?.map((p) => p.text || "").join("") || "";
+      if (!text) { console.log("[WC-CHAT] fail empty"); return null; }
+      let obj;
+      try { obj = JSON.parse(text); } catch { console.log("[WC-CHAT] fail bad-json"); return null; }
+      const reading = validateChatReading(obj, refs, haystack, { allowNoLead: smallTalk });
+      if (!reading) { console.log("[WC-CHAT] fail fences"); return null; }
+      console.log("[WC-CHAT] ok");
+      return reading;
+    } catch (err) {
+      console.log(`[WC-CHAT] fail ${err && err.name === "AbortError" ? "timeout" : "network"}`);
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+  let reading = await attempt(userPrompt);
+  if (!reading) {
+    // ONE corrective retry (Nov 14, 2026 — live battery finding): a
+    // first attempt most often dies on the grounding fences when the
+    // retrieved set feels off-topic and the model reaches for a
+    // passage from memory (a job-loss question's Job passages, say,
+    // while its instincts run to Philippians 4). The retry names the
+    // rules it broke and asks again; still free tier, still fenced,
+    // and a second failure falls back exactly as before.
+    const note = smallTalk
+      ? `\n\nCorrection: your previous reply was rejected. Keep it to a brief, warm sentence or two, return lead as null, and include NO Scripture quotation and NO passage name at all.`
+      : `\n\nCorrection: your previous reply was rejected for breaking a grounding rule. This time: name NO passage outside the list above, however fitting it seems; copy every quotation from the listed texts exactly, word for word; use quotation marks for nothing else; use no headings; keep it conversational and answer the visitor directly.`;
+    reading = await attempt(userPrompt + note);
+    if (reading) console.log("[WC-CHAT] ok-on-retry");
   }
+  return reading;
 }
 
 // Last-resort reply for a small-talk turn whose composer call failed
@@ -1482,12 +1504,13 @@ function extractGuidanceSection(guidance, label) {
 // on the previous one (pronouns, "what if…", very short messages), and
 // the reader receives the story as context. Everything else is the
 // ask machinery unchanged: the verified search with passage
-// completion and widening, ONE fenced Gemini call per non-crisis
-// turn, the same grounding fences (the chat validator adds a
-// no-section-headings rule of its own — see the chat composer
-// section), and a silent fallback to a template reply assembled from
-// the search's own words. Crisis wording in any message takes the
-// local crisis path — zero Gemini calls — exactly as in the ask flow.
+// completion and widening, a fenced Gemini call per non-crisis
+// turn (one corrective retry on a fence failure), the same grounding
+// fences (the chat validator adds a no-section-headings rule of its
+// own — see the chat composer section), and a silent fallback to a
+// template reply assembled from the search's own words. Crisis
+// wording in any message takes the local crisis path — zero Gemini
+// calls — exactly as in the ask flow.
 async function handleChatTurn(req, res) {
   const message = String(req.body?.message || "").trim().slice(0, 3000);
   if (!message) return res.status(400).json({ error: "Please type or say your question first." });
