@@ -33,6 +33,7 @@
 .bubble.user .who{color:#c9a227}
 .bubble.hannah{align-self:flex-start;background:#fffcf6;border:1px solid #e5ded1;border-bottom-left-radius:6px}
 .bubble.crisis{border-color:#9c3428;background:#fdf6f3}
+.busy-note{margin:12px 0 0;padding-top:10px;border-top:1px solid #e5ded1;font-size:14px;line-height:1.5;color:#667085;font-style:italic}
 .bubble.thinking{color:#667085;font-style:italic}
 .scripture{background:#fff7e6;border:1px solid #e2c16b;border-radius:14px;padding:14px 16px;margin:0 0 12px}
 .scripture .ref{font-family:Georgia,serif;font-weight:700;color:#1e3a5f;font-size:17px;margin-bottom:6px}
@@ -152,6 +153,12 @@ function addHannahBubble(data) {
       html += '<div class="scripture small"><div class="ref">' + escapeHTML(s.title || s.ref) + '</div><div class="txt">' + escapeHTML(s.text) + "</div></div>";
     }
     html += "</details>";
+  }
+  if (data.busy) {
+    // Busy fallback (server-flagged): this answer shipped from the
+    // search alone because Hannah's writing step was overwhelmed.
+    // A quiet footnote under the answer — never an error banner.
+    html += '<p class="busy-note">Hannah&rsquo;s a little overwhelmed at the moment, so this answer came straight from the Scripture search. Ask again in a few minutes and she&rsquo;ll walk through it with you properly.</p>';
   }
   d.innerHTML = html;
   chatLog.appendChild(d);

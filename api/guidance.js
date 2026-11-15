@@ -1629,15 +1629,27 @@ async function handleChatTurn(req, res) {
     }
   }
   if (!reply && smallTalk) { reply = greetingFallbackFor(message); greetingReply = true; }
+  let templateReply = false;
   if (!reply) {
     // Template reply: the search's own plain-language guidance and
     // next wise step, verbatim (for a crisis turn these ARE the care
     // text — 988, 911, and the comfort passages lead).
+    templateReply = true;
     const plain = extractGuidanceSection(answer.guidance, "Plain-Language Guidance");
     const step = extractGuidanceSection(answer.guidance, "Next Wise Step");
     reply = [plain, step].filter(Boolean).join("\n\n")
       || extractGuidanceSection(answer.guidance, "Biblical Principle");
   }
+  // Busy fallback (Nov 14, 2026 — Jeff approved): an ordinary question
+  // whose composer calls all failed ships the template above, and that
+  // turn — only that turn — is flagged busy, so the page can show a
+  // plain note under the answer and the log can count it (the "b"
+  // suffix below). Crisis turns also pass through the template block
+  // (their care text lives there) but are NEVER busy: the care path
+  // is local and instant, and composition is skipped for them by
+  // design. Small talk never reaches the template block (the greeting
+  // fallback answers it), and a composed turn sets composed instead.
+  const busyFallback = templateReply && !crisis;
   const leadRef = greetingReply ? null : (answer.meta && answer.meta.leadRef) || null;
   const panel = answer.passages || {};
   // The quote block and the supporting passages carry the full texts
@@ -1661,7 +1673,9 @@ async function handleChatTurn(req, res) {
   // and semantics to the ask flow (see the handler's note) — the
   // visitor's own message, the concepts it carried, the topics and
   // lead the (possibly interpreted) search used, the fallback level,
-  // and the "g" suffix when the reader voiced the reply.
+  // and the "g" suffix when the reader voiced the reply. A busy
+  // fallback turn carries a "b" suffix instead, so the weekly digest
+  // can count how often composition failed and the template shipped.
   const logId = randomUUID();
   const pendingLog = logQuestion([
     new Date().toISOString(),
@@ -1670,7 +1684,7 @@ async function handleChatTurn(req, res) {
     search.conceptsOf(message).map((c) => c.stem).join(", "),
     (answer.meta && answer.meta.topics ? answer.meta.topics : []).join("; "),
     leadRef || "",
-    String(level) + (composed ? "g" : ""),
+    String(level) + (composed ? "g" : busyFallback ? "b" : ""),
     categoryOf(message),
   ]);
   try {
@@ -1687,6 +1701,9 @@ async function handleChatTurn(req, res) {
     passages: panel,
     composed,
     crisis,
+    // Present ONLY on a busy-fallback turn (see busyFallback above);
+    // composed, small-talk, and crisis responses never carry it.
+    ...(busyFallback ? { busy: true } : {}),
     logId,
   });
 }
