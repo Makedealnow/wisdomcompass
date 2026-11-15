@@ -155,6 +155,20 @@ function isCrisis(question) {
   return CRISIS_RE.test(String(question || "").toLowerCase());
 }
 
+// Small talk (Nov 14, 2026 — Jeff's acceptance case): a message that is
+// ONLY a greeting, thanks, or farewell ("hi", "good morning", "thank
+// you", "bye") is conversation, not a question — Hannah greets back
+// briefly and waits, with no passage essay and no forced Scripture.
+// The pattern is anchored at both ends on purpose: the whole message
+// must be small talk, so a greeting carrying a real question ("hi,
+// what does the Bible say about debt?") never matches and takes the
+// grounded answering path as usual.
+const SMALL_TALK_RE = /^(hi+|hello|hey+|howdy|greetings|good (morning|afternoon|evening)|how are you( doing)?|how'?s it going|what'?s up|thank(s| you)( so much| a lot| for (that|this|everything))?|bye|good ?bye|good ?night|see you( later)?|amen|ok(ay)?|just (saying|stopping by to say) hi)\W*$/i;
+function isSmallTalk(message) {
+  const t = String(message || "").trim().replace(/\s+/g, " ");
+  return t.length <= 60 && SMALL_TALK_RE.test(t);
+}
+
 function conceptsOf(question) {
   const raw = String(question || "").toLowerCase().match(/[a-z0-9']+/g) || [];
   const seen = new Set();
@@ -445,6 +459,19 @@ function loadSearch() {
       end++;
     }
     return end > p.v1 ? `${p.book} ${p.ch1}:${p.v1}-${end}` : ref;
+  }
+
+  // The handed-text shape at loadSearch scope (searchAnswer's own
+  // handedText delegates here): a passage's full text in a source, no
+  // verse numbers; passages longer than twenty verses are handed as
+  // head + closing verses. Exposed on SEARCH as passageText so the
+  // chat turn can keep an earlier turn's lead passage quotable.
+  function handedTextIn(ref, src) {
+    const { verses } = expandRef(ref, 40);
+    if (!verses.length) return "";
+    const join = (arr) => arr.map((v) => src.text[v]).join(" ");
+    if (verses.length > 20) return join(verses.slice(0, 12)) + " … " + join(verses.slice(-3));
+    return join(verses);
   }
 
   function searchAnswer(question, opts = {}) {
@@ -896,13 +923,7 @@ function loadSearch() {
     // closing verses, the same shape the answer body displays; the
     // reader may quote only what it is handed, and validation checks
     // its quotations against exactly these texts.
-    const handedText = (ref) => {
-      const { verses } = expandRef(ref, 40);
-      if (!verses.length) return "";
-      const join = (arr) => arr.map((v) => src.text[v]).join(" ");
-      if (verses.length > 20) return join(verses.slice(0, 12)) + " … " + join(verses.slice(-3));
-      return join(verses);
-    };
+    const handedText = (ref) => handedTextIn(ref, src);
 
     // assemble the answer in the site's established shape
     // De-inversion can make two distinct Nave's headings display identically
@@ -1048,7 +1069,14 @@ function loadSearch() {
     return { answer: searchAnswer(question, { forceTopic: "Wisdom", translation }), level: 4 };
   }
 
-  SEARCH = { searchAnswer: answerSearch, conceptsOf };
+  SEARCH = {
+    searchAnswer: answerSearch,
+    conceptsOf,
+    // Full handed text for any single reference in a translation, or
+    // null when the reference does not expand (Nov 14, 2026 — the chat
+    // turn keeps earlier turns' lead passages on the table with this).
+    passageText: (ref, translation) => handedTextIn(ref, SOURCES[translation === "kjv" ? "kjv" : "bsb"]) || null,
+  };
   return SEARCH;
 }
 
@@ -1276,41 +1304,115 @@ async function readWithGemini({ question, fullPassages }) {
   }
 }
 
-const CHAT_SYSTEM = `You are Hannah, the warm, plain-spoken guide of WisdomCompass, talking with a visitor in a live chat. A Bible search has already gathered the passages that may answer the visitor's new message. From the passages provided, choose the ONE that most directly answers the new message — judge by what each passage actually is and means in context (direct teaching, story, wisdom, or metaphor), not by shared wording, and use the conversation only to understand what the visitor is referring to. Then explain the chosen passage to them in plain language, as a conversation, in five parts, in this order, each part headed by exactly the words given, on its own line:
-1. "The scene" — who is speaking or what is happening.
-2. "What it meant" — what it meant in its setting.
-3. "The teaching" — the teaching, point by point.
-4. "For your question" — how it bears on the visitor's message.
-5. "Read together" — the related passages from the provided set, read together.
-You may open with one short, warm sentence of your own before "The scene". Write as Hannah speaking to one person ("you"), warmly and plainly, in modern English, with no church jargon.
+// ---- Chat composer (Nov 14, 2026 — conversational rewrite) ----
+// Jeff's standard, set after testing the live chat himself: Hannah in
+// chat must respond like a real conversational AI service — a direct,
+// natural reply to whatever the visitor asks, follow-ups handled in
+// context — not the ask flow's five-section essay read aloud in a chat
+// bubble. The Nov 8 chat step had reused the reader's instructions
+// wholesale (CHAT_SYSTEM mandated the five headed parts, and the
+// shared validateReading REQUIRED all five headings in order), so
+// every composed chat reply was an essay by construction. Worse, any
+// reply that deviated — and every natural follow-up that leaned on the
+// passage discussed in the previous turn, which the prompt forbade
+// quoting unless this turn's fresh retrieval happened to cover it —
+// failed the fences and silently shipped the raw search template
+// instead. The chat step now has its own instructions and its own
+// validator: the GROUNDING fences are unchanged (lead inside the
+// allowed set, every named reference covered by it, every quotation
+// verbatim in the handed texts, no links), but there is no section
+// requirement — and a reply that lapses into the five headed sections
+// is rejected for chat. The allowed set for a chat turn is this turn's
+// retrieved passages PLUS the lead passages of the recent turns still
+// under discussion (see handleChatTurn), so a follow-up about the
+// passage Hannah just explained can quote and cite it lawfully.
+const CHAT_SYSTEM = `You are Hannah, the warm, plain-spoken guide of WisdomCompass, chatting live with a visitor — a real back-and-forth conversation, the way a person talks with a helpful AI assistant. In front of you: the story of the conversation so far, the visitor's new message, and a set of Bible passages.
 
-Rules: use ONLY the passages provided; quote them exactly as given, word for word, and put quotation marks around every quotation; name no passage that was not provided; do not add advice beyond what the passages support.
+How to answer:
+- Reply like a person in a live chat: warm, plain, natural modern English, speaking to one person ("you"), with no church jargon. Your first sentence answers the visitor's actual message directly — no warming up, no lecture.
+- This is a conversation, not an essay. Use the story so far: a follow-up builds on what was already said — answer the new point, refer back naturally when it helps ("like we were saying…"), and never restart the topic, re-introduce yourself, or repeat what you already told them.
+- Ground everything in the passages provided. Lean on the ONE that most directly answers the new message — judge by what the passage actually is and means in context (direct teaching, story, wisdom, or metaphor), not by shared wording — and weave it into your reply in your own flowing words: what was happening, what it teaches, and what it means for the visitor. Underneath, the substance is a real situation in Scripture, the principle it teaches, and a wiser next step — but that is the substance of your answer, never its format.
+- NEVER use section headings of any kind — no headings, no numbered parts, no bold labels. In particular, never write "The scene", "What it meant", "The teaching", "For your question", or "Read together". Just talk.
+- Length: a few short paragraphs is the default (roughly 80–220 words). A simple factual question gets a short answer — a sentence or two can be plenty. Go longer only when the visitor's situation truly needs it. Ending with one gentle question back to them is welcome when it fits; don't force it.
+- The passages marked as from earlier in this conversation are still open on the table — when the visitor's message is really about one of those, answer from it.
 
-Return ONLY a JSON object: {"lead": "<the reference of the chosen passage, exactly as provided>", "explanation": "<the five-part explanation>"}. No markdown, no text outside the JSON.`;
+Rules (absolute): use ONLY the passages provided in this request; quote them exactly as given, word for word, and put quotation marks around every quotation — quotation marks are ONLY for words quoted from the passages, never for emphasis, never for the visitor's words, and never around your own phrases; name no passage that was not provided; never quote Scripture from memory; if the provided passages only partly cover the question, say so honestly and answer from what is there; do not add advice beyond what the passages support.
 
-// The chat reader step: the same single fenced Gemini call as
-// readWithGemini, with the conversation carried as context. The
-// validation fences are IDENTICAL (validateReading) — a chat answer
-// ships only when its lead is one of the retrieved references, every
-// passage it names is covered by the retrieved set, every quotation
-// is verbatim in the handed texts, and all five parts are present.
-// Returns { lead, explanation } or null; null always means "use the
-// template reply". This function never throws.
-async function readChatWithGemini({ message, history, fullPassages }) {
+Return ONLY a JSON object: {"lead": "<the reference of the passage your answer leans on most, exactly as provided>", "reply": "<your conversational reply>"}. No markdown, no text outside the JSON.`;
+
+// Chat validation: validateReading's grounding fences, minus the
+// five-section requirement, plus a rejection for lapsing into those
+// headed sections (a line that is exactly one of the reader headings,
+// with or without a trailing colon). Conversational length bounds: a
+// plain factual answer may be short; an essay-length reply is out of
+// shape for chat. Returns { lead, reply } or null — null always means
+// "use the template reply". This function never throws.
+function validateChatReading(obj, allowedRefs, haystack, { allowNoLead = false } = {}) {
+  if (!obj || typeof obj !== "object") return null;
+  const lead = String(obj.lead || "").replace(/\s+/g, " ").trim();
+  const reply = String(obj.reply || obj.explanation || "").trim();
+  const hasHeadings = () => {
+    for (const line of reply.split("\n")) {
+      const t = line.trim().replace(/:$/, "").toLowerCase();
+      if (READER_SECTIONS.some((h) => h.toLowerCase() === t)) return true;
+    }
+    return false;
+  };
+  if (!lead && allowNoLead) {
+    // Small-talk reply (Nov 14, 2026): no lead passage, and the fences
+    // invert — the reply must be brief and carry NO Scripture content
+    // at all: no named reference, no quotation, no link, no headings.
+    if (reply.length < 10 || reply.length > 400) return null;
+    if (/https?:\/\//i.test(reply)) return null;
+    if ((reply.match(REF_RE) || []).length || (reply.match(CHAPTER_REF_RE) || []).length) { console.log("[WC-CHAT] fail smalltalk-citation"); return null; }
+    if (extractQuotedSpans(reply).some((q) => normalizeForQuote(q))) { console.log("[WC-CHAT] fail smalltalk-quote"); return null; }
+    if (hasHeadings()) { console.log("[WC-CHAT] fail fences-headings"); return null; }
+    return { lead: null, reply };
+  }
+  if (!allowedRefs.includes(lead)) return null;
+  if (reply.length < 40 || reply.length > 4200) return null;
+  if (/https?:\/\//i.test(reply)) return null;
+  if (hasHeadings()) { console.log("[WC-CHAT] fail fences-headings"); return null; }
+  const cited = [...(reply.match(REF_RE) || []), ...(reply.match(CHAPTER_REF_RE) || [])];
+  for (const c of cited) if (!refCovered(c.replace(/\s+/g, " "), allowedRefs)) return null;
+  const hay = " " + normalizeForQuote(haystack) + " ";
+  for (const q of extractQuotedSpans(reply)) {
+    const inner = normalizeForQuote(q);
+    if (inner && !hay.includes(" " + inner + " ") && !hay.includes(inner)) {
+      console.log("[WC-CHAT] fail fences-quote");
+      return null;
+    }
+  }
+  return { lead, reply };
+}
+
+// The chat composer step: one fenced Gemini call (free tier), the
+// conversation carried as context, this turn's retrieved passages
+// plus any earlier lead passages still under discussion as the only
+// quotable material. Returns { lead, reply } or null; null always
+// means "use the template reply". This function never throws.
+async function readChatWithGemini({ message, history, fullPassages, earlierPassages = [], smallTalk = false }) {
   const key = process.env.GEMINI_API_KEY;
-  if (!key || !fullPassages || !fullPassages.length) { console.log("[WC-READER] fail no-key-or-passages"); return null; }
-  const refs = fullPassages.map((p) => p.ref);
+  if (!key || !fullPassages || !fullPassages.length) { console.log("[WC-CHAT] fail no-key-or-passages"); return null; }
+  const all = [...fullPassages, ...earlierPassages];
+  const refs = all.map((p) => p.ref);
   const material = fullPassages.map((p) => `${p.ref}\n${p.text}`).join("\n\n");
+  const earlier = earlierPassages.length
+    ? `\n\nPassages from earlier in this conversation (still open on the table — you may quote and cite these too, word for word):\n${earlierPassages.map((p) => `${p.ref}\n${p.text}`).join("\n\n")}`
+    : "";
   const story = history.length
     ? history.map((h) => h.role === "user"
         ? `Visitor: ${h.text.slice(0, 500)}`
-        : `Hannah${h.leadRef ? ` (led with ${h.leadRef})` : ""}: ${h.text.slice(0, 300)}`).join("\n")
+        : `Hannah${h.leadRef ? ` (led with ${h.leadRef})` : ""}: ${h.text.slice(0, 700)}`).join("\n")
     : "(this is the visitor's first message)";
   const userPrompt =
-    `You are continuing a conversation. The story so far is context only — earlier passages are NOT available to you; you may quote ONLY the passages listed below, retrieved fresh for the visitor's new message.\n\n` +
+    `You are continuing a live conversation. The story so far is context — use it to understand what the visitor means and to build on what was said. You may quote ONLY the passages listed below (retrieved for the new message, plus any listed as from earlier in this conversation), word for word, and name no others.\n\n` +
     `Conversation so far:\n${story}\n\n` +
     `Visitor's new message:\n${message}\n\n` +
-    `Passages the search retrieved for this message (quote ONLY from these, word for word; name no others):\n${material}`;
+    (smallTalk
+      ? `This message is small talk — a greeting, thanks, or farewell, not a question. Reply briefly and warmly, like a person: a sentence or two, and if it fits, invite them to share what's on their mind. Do NOT explain a passage, do NOT quote or name any Scripture. Return {"lead": null, "reply": "<your brief reply>"}.\n\n`
+      : "") +
+    `Passages the search retrieved for this message (quote ONLY from these and the earlier passages below, word for word; name no others):\n${material}${earlier}`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
   try {
@@ -1327,23 +1429,35 @@ async function readChatWithGemini({ message, history, fullPassages }) {
         }),
       }
     );
-    if (!resp.ok) { console.log(`[WC-READER] fail http-${resp.status}`); return null; }
+    if (!resp.ok) { console.log(`[WC-CHAT] fail http-${resp.status}`); return null; }
     const data = await resp.json();
     const text = (((data.candidates || [])[0] || {}).content || {}).parts?.map((p) => p.text || "").join("") || "";
-    if (!text) { console.log("[WC-READER] fail empty"); return null; }
+    if (!text) { console.log("[WC-CHAT] fail empty"); return null; }
     let obj;
-    try { obj = JSON.parse(text); } catch { console.log("[WC-READER] fail bad-json"); return null; }
-    const haystack = fullPassages.map((p) => p.text).join("\n");
-    const reading = validateReading(obj, refs, haystack);
-    if (!reading) { console.log("[WC-READER] fail fences"); return null; }
-    console.log("[WC-READER] ok");
+    try { obj = JSON.parse(text); } catch { console.log("[WC-CHAT] fail bad-json"); return null; }
+    const haystack = all.map((p) => p.text).join("\n");
+    const reading = validateChatReading(obj, refs, haystack, { allowNoLead: smallTalk });
+    if (!reading) { console.log("[WC-CHAT] fail fences"); return null; }
+    console.log("[WC-CHAT] ok");
     return reading;
   } catch (err) {
-    console.log(`[WC-READER] fail ${err && err.name === "AbortError" ? "timeout" : "network"}`);
+    console.log(`[WC-CHAT] fail ${err && err.name === "AbortError" ? "timeout" : "network"}`);
     return null;
   } finally {
     clearTimeout(timer);
   }
+}
+
+// Last-resort reply for a small-talk turn whose composer call failed
+// (Nov 14, 2026): a greeting must never ship the search template, so
+// greeting-class messages fall back to a brief human greeting instead.
+// Ordinary questions never reach this — their fallback stays the
+// template reply below.
+function greetingFallbackFor(message) {
+  const t = String(message || "").toLowerCase();
+  if (/\bthank/.test(t)) return "You're very welcome. If something else comes to mind — a decision, a worry, anything at all — just ask, and we'll look at it together.";
+  if (/\b(bye|goodbye|good night|see you)\b/.test(t)) return "Goodbye for now — come back any time. I'll be here whenever you need a word of wisdom for the road.";
+  return "Hello — good to see you. What's on your mind today? Tell me what you're facing, and we'll see what the Bible says about it together.";
 }
 
 // One section's body out of the search's assembled template text (the
@@ -1369,10 +1483,11 @@ function extractGuidanceSection(guidance, label) {
 // the reader receives the story as context. Everything else is the
 // ask machinery unchanged: the verified search with passage
 // completion and widening, ONE fenced Gemini call per non-crisis
-// turn, the identical validation fences, and a silent fallback to a
-// template reply assembled from the search's own words. Crisis
-// wording in any message takes the local crisis path — zero Gemini
-// calls — exactly as in the ask flow.
+// turn, the same grounding fences (the chat validator adds a
+// no-section-headings rule of its own — see the chat composer
+// section), and a silent fallback to a template reply assembled from
+// the search's own words. Crisis wording in any message takes the
+// local crisis path — zero Gemini calls — exactly as in the ask flow.
 async function handleChatTurn(req, res) {
   const message = String(req.body?.message || "").trim().slice(0, 3000);
   if (!message) return res.status(400).json({ error: "Please type or say your question first." });
@@ -1405,6 +1520,7 @@ async function handleChatTurn(req, res) {
       const words = message.split(/\s+/).filter(Boolean).length;
       const direct = search.conceptsOf(message).filter((c) => c.direct).length;
       const leans = /\b(what (if|about)|how about|and if|but what|so what|then what)\b/i.test(message)
+        || /^(so|but|and|then)\b/i.test(message)
         || direct === 0
         || words <= 3
         || (words <= 10 && /\b(she|her|hers|he|him|his|they|them|their|it|that|this|those|these)\b/i.test(message));
@@ -1414,23 +1530,56 @@ async function handleChatTurn(req, res) {
   const { answer, level } = search.searchAnswer(effective, translation);
   if (!answer) return res.status(500).json({ error: "Something went wrong. Please try again." });
   const crisis = !!(answer.parts && answer.parts.crisis);
+  const smallTalk = !crisis && isSmallTalk(message);
   let composed = false;
   let reply = "";
+  let greetingReply = false;
+  // The full texts the response's quote block may draw on: this turn's
+  // retrieved passages, widened below with any earlier lead passages
+  // the composer was allowed to lean on.
+  let chatFullPassages = (answer.parts && answer.parts.fullPassages) || [];
   if (!crisis && process.env.GEMINI_API_KEY && answer.parts) {
+    // Earlier turns' lead passages stay on the table (Nov 14, 2026):
+    // a follow-up is usually ABOUT the passage Hannah just explained,
+    // and the old prompt forbade quoting it unless this turn's fresh
+    // retrieval happened to cover it — the fence then rejected the
+    // natural answer and the raw template shipped. The last two
+    // distinct earlier leads join the composer's allowed set, fetched
+    // from the search's own texts in the visitor's translation.
+    const earlierPassages = [];
+    {
+      const have = new Set(chatFullPassages.map((p) => p.ref));
+      for (const h of [...history].reverse()) {
+        if (earlierPassages.length >= 2) break;
+        if (h.role !== "hannah" || !h.leadRef || have.has(h.leadRef)) continue;
+        const text = search.passageText(h.leadRef, translation);
+        if (text) { earlierPassages.push({ ref: h.leadRef, text }); have.add(h.leadRef); }
+      }
+    }
+    if (earlierPassages.length) chatFullPassages = [...chatFullPassages, ...earlierPassages];
     const r = await readChatWithGemini({
       message,
       history,
       fullPassages: answer.parts.fullPassages,
+      earlierPassages,
+      smallTalk,
     }).catch(() => null);
-    if (r) {
+    if (r && r.lead) {
       const ordered = [r.lead, ...answer.parts.refs.filter((x) => x !== r.lead)];
-      const rebuilt = answer.parts.rebuild(ordered, r.explanation);
+      const rebuilt = answer.parts.rebuild(ordered, r.reply);
       answer.passages = rebuilt.passages;
       answer.meta = { ...answer.meta, leadRef: r.lead, refs: ordered };
-      reply = r.explanation;
+      reply = r.reply;
       composed = true;
+    } else if (r) {
+      // Small-talk reply: no lead passage, nothing to rebuild — the
+      // reply stands alone and the response carries no quote block.
+      reply = r.reply;
+      composed = true;
+      greetingReply = true;
     }
   }
+  if (!reply && smallTalk) { reply = greetingFallbackFor(message); greetingReply = true; }
   if (!reply) {
     // Template reply: the search's own plain-language guidance and
     // next wise step, verbatim (for a crisis turn these ARE the care
@@ -1440,18 +1589,18 @@ async function handleChatTurn(req, res) {
     reply = [plain, step].filter(Boolean).join("\n\n")
       || extractGuidanceSection(answer.guidance, "Biblical Principle");
   }
-  const leadRef = (answer.meta && answer.meta.leadRef) || null;
+  const leadRef = greetingReply ? null : (answer.meta && answer.meta.leadRef) || null;
   const panel = answer.passages || {};
   // The quote block and the supporting passages carry the full texts
   // the reader was handed (flowing text, no verse numbers — the chat
   // reading format), not the panel's head-and-tail display text: the
   // lead passage must never reach the visitor with its key verses
   // elided by a display cap.
-  const fullByRef = new Map(((answer.parts && answer.parts.fullPassages) || []).map((p) => [p.ref, p.text]));
+  const fullByRef = new Map(chatFullPassages.map((p) => [p.ref, p.text]));
   const translationName = (answer.meta && answer.meta.translation) === "kjv" ? "King James Version" : "Berean Standard Bible";
   const leadEntry = leadRef ? panel[leadRef] : null;
   const orderedRefs = (answer.meta && answer.meta.refs) || [];
-  const supporting = orderedRefs
+  const supporting = greetingReply ? [] : orderedRefs
     .filter((ref) => ref !== leadRef && (fullByRef.has(ref) || panel[ref]))
     .slice(0, 2)
     .map((ref) => ({
