@@ -1416,11 +1416,21 @@ async function readChatWithGemini({ message, history, fullPassages, earlierPassa
       : "") +
     `Passages the search retrieved for this message (quote ONLY from these and the earlier passages below, word for word; name no others):\n${material}${earlier}`;
   const haystack = all.map((p) => p.text).join("\n");
+  // Attempt timing (Nov 14, 2026 — live battery finding): the hosting
+  // function caps at 30 seconds (vercel.json maxDuration), and the
+  // free tier answers in bursts — failures cluster under rapid fire
+  // and clear at a visitor's pace. Attempts therefore run on a shared
+  // clock: a fast failure (a quota refusal comes back in about a
+  // second) earns both retries after a short pause, while slow
+  // attempts are cut off so the whole turn always finishes inside
+  // the function's budget and the fallback can still ship.
+  const started = Date.now();
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   // One attempt: a single fenced Gemini call for the given prompt.
   // Returns the validated { lead, reply } or null on any failure.
-  const attempt = async (promptText) => {
+  const attempt = async (promptText, timeoutMs) => {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const resp = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
@@ -1452,8 +1462,8 @@ async function readChatWithGemini({ message, history, fullPassages, earlierPassa
       clearTimeout(timer);
     }
   };
-  let reading = await attempt(userPrompt);
-  if (!reading) {
+  let reading = await attempt(userPrompt, 10000);
+  if (!reading && Date.now() - started < 15000) {
     // ONE corrective retry (Nov 14, 2026 — live battery finding): a
     // first attempt most often dies on the grounding fences when the
     // retrieved set feels off-topic and the model reaches for a
@@ -1464,10 +1474,11 @@ async function readChatWithGemini({ message, history, fullPassages, earlierPassa
     const note = smallTalk
       ? `\n\nCorrection: your previous reply was rejected. Keep it to a brief, warm sentence or two, return lead as null, and include NO Scripture quotation and NO passage name at all.`
       : `\n\nCorrection: your previous reply was rejected for breaking a grounding rule. This time: name NO passage outside the list above, however fitting it seems; copy every quotation from the listed texts exactly, word for word; use quotation marks for nothing else; use no headings; keep it conversational and answer the visitor directly.`;
-    reading = await attempt(userPrompt + note);
+    await sleep(1200);
+    reading = await attempt(userPrompt + note, 10000);
     if (reading) console.log("[WC-CHAT] ok-on-retry");
   }
-  if (!reading) {
+  if (!reading && Date.now() - started < 19000) {
     // Final attempt (Nov 14, 2026 — live battery finding): drop inline
     // quotations entirely. The verbatim-quote fence is the most
     // brittle of the fences, and a reply that quotes nothing cannot
@@ -1478,7 +1489,8 @@ async function readChatWithGemini({ message, history, fullPassages, earlierPassa
     const note3 = smallTalk
       ? `\n\nCorrection: your previous reply was rejected. Keep it to a brief, warm sentence or two, return lead as null, and include NO Scripture quotation and NO passage name at all.`
       : `\n\nFinal correction: your previous replies were rejected. Answer in plain conversational prose with NO quotation marks anywhere in your reply — refer to passages by name only (for example: Proverbs 22:7 warns that…), choosing names ONLY from the list above. No headings, no lists of sections — just talk to the visitor.`;
-    reading = await attempt(userPrompt + note3);
+    await sleep(2000);
+    reading = await attempt(userPrompt + note3, 8000);
     if (reading) console.log("[WC-CHAT] ok-on-final-attempt");
   }
   return reading;
