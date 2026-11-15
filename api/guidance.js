@@ -169,6 +169,60 @@ function isSmallTalk(message) {
   return t.length <= 60 && SMALL_TALK_RE.test(t);
 }
 
+// Off-purpose task work (Nov 14, 2026 — Jeff approved steering; a
+// per-visitor speed limit was considered the same night and
+// deliberately deferred, and is NOT built here): Hannah is a Bible
+// guide for life's questions, not a general task assistant. A message
+// that asks her to PRODUCE unrelated work — write code, do homework,
+// write a poem about a cat — is steered: one or two warm sentences
+// declining, inviting the life question underneath, and never a fake
+// passage answer. Detection is deliberately conservative, in layers:
+//   1. Vetoes first. ANY Bible marker or life-topic marker anywhere
+//      in the message means it is never steered: a genuine Bible
+//      question however plainly factual ("Who was Moses' brother?"),
+//      a life question however oddly phrased, and every sensitive
+//      topic (divorce, grief, despair — the care paths) always take
+//      the answering path. A task request that slips past to the
+//      grounded path is an acceptable miss; a declined sincere
+//      question is not.
+//   2. A production request form (an imperative, a "can you…", an
+//      "I want you to…") PLUS a work-product noun — or, standing
+//      alone, a translate/summarize/rewrite request or a debug-my-
+//      code request, which are task work on their face.
+//   3. A few unmistakable trivia-contest frames (capital of…, World
+//      Cup…), under the same vetoes. General trivia beyond those
+//      frames is NOT steered: it flows through the grounded path,
+//      where Hannah honestly says the passages she was given do not
+//      cover it — the safe failure, since a factual trivia question
+//      and a factual Bible question share the same shape.
+const OFFTOPIC_BIBLE_RE = /\b(bible|scriptures?|verses?|passages?|god|jesus|christ|lord|holy spirit|pray|prayers?|praying|church|faith|gospel|psalms?|proverbs?|testament|heaven|hell|angels?|sins?|sermon|devotion|disciples?|apostles?|moses|abraham|isaac|jacob|joseph|noah|adam|eve|david|solomon|samuel|elijah|elisha|isaiah|jeremiah|daniel|jonah|job|ruth|esther|mary|peter|paul|john|james|judas|pharaoh|exodus|genesis|temple|priests?|prophets?|baptism|communion|sabbath|bless\w*|worship|spiritual|romans|corinthians|galatians|ephesians|philippians|colossians|thessalonians|timothy|hebrews|revelation|leviticus|deuteronomy|nehemiah|ecclesiastes|lamentations|ezekiel|habakkuk|zephaniah|zechariah|malachi|matthew)\b/i;
+const OFFTOPIC_LIFE_RE = /\b(divorce|divorced|marriage|married|marry|wife|husband|spouse|grief|griev\w+|died|death|dying|funeral|anxiety|anxious|worry|worried|worries|fear|afraid|scared|depress\w+|lonel\w+|addict\w+|alcohol|drugs?|forgiv\w+|anger|angry|money|debts?|borrow\w*|loans?|jobs?|career|kids?|children|child|son|daughter|mother|father|mom|dad|parents?|family|friends?|health|sick|sickness|illness|cancer|hospital|sleep|sleeping|tired|stress\w*|hurting|hurt|pain|crying|hopeless|overwhelmed|struggl\w+|suffer\w*|broken|should i)\b/i;
+const OFFTOPIC_ARTIFACT_RE = /\b(code|coding|function|programs?|scripts?|apps?|websites?|web ?pages?|essays?|homework|assignments?|poems?|poetry|song|story|stories|novel|book report|resume|résumé|cover letters?|speeches|jokes?|riddles?|rap|logos?|math problems?|equations?|worksheets?|quiz|quizzes|trivia|spreadsheets?|excel|python|javascript|java|sql|html|css)\b/i;
+const OFFTOPIC_VERBS = "write|draft|compose|generate|create|make|build|code|program|design|draw|solve|finish|complete";
+const OFFTOPIC_REQUEST_RES = [
+  new RegExp(`^(please\\s+|ok(ay)?[,.]?\\s+|so\\s+|now\\s+|and\\s+|then\\s+)?(${OFFTOPIC_VERBS})\\b`, "i"),
+  new RegExp(`\\b(can|could|will|would)\\s+you\\s+(please\\s+)?(${OFFTOPIC_VERBS}|do)\\b`, "i"),
+  new RegExp(`\\b(want|need|would like|'d like)\\s+you\\s+to\\s+(${OFFTOPIC_VERBS}|do)\\b`, "i"),
+  new RegExp(`\\b(${OFFTOPIC_VERBS}|do)\\s+(me|my)\\b`, "i"),
+  new RegExp(`\\bhelp\\s+me\\s+(${OFFTOPIC_VERBS}|do)\\b`, "i"),
+];
+const OFFTOPIC_REWRITE_RES = [
+  /^(please\s+)?(translate|summarize|summarise|rewrite|paraphrase|proofread)\b/i,
+  /\b(can|could|will|would)\s+you\s+(please\s+)?(translate|summarize|summarise|rewrite|paraphrase|proofread)\b/i,
+];
+const OFFTOPIC_DEBUG_RE = /\b(debug|fix|repair)\b[^.?!]{0,50}\b(code|program|script|app|function|bug|error|website)\b/i;
+const OFFTOPIC_TRIVIA_RE = /\b(capital of|world cup|super bowl|olympics|world series)\b/i;
+function isOffTopicTask(message) {
+  const t = String(message || "").trim().replace(/\s+/g, " ");
+  if (!t || t.length > 500) return false;
+  if (OFFTOPIC_BIBLE_RE.test(t) || OFFTOPIC_LIFE_RE.test(t)) return false;
+  if (OFFTOPIC_TRIVIA_RE.test(t)) return true;
+  if (OFFTOPIC_REWRITE_RES.some((re) => re.test(t))) return true;
+  if (OFFTOPIC_DEBUG_RE.test(t)) return true;
+  if (!OFFTOPIC_ARTIFACT_RE.test(t)) return false;
+  return OFFTOPIC_REQUEST_RES.some((re) => re.test(t));
+}
+
 function conceptsOf(question) {
   const raw = String(question || "").toLowerCase().match(/[a-z0-9']+/g) || [];
   const seen = new Set();
@@ -1347,7 +1401,7 @@ Return ONLY a JSON object: {"lead": "<the reference of the passage your answer l
 // plain factual answer may be short; an essay-length reply is out of
 // shape for chat. Returns { lead, reply } or null — null always means
 // "use the template reply". This function never throws.
-function validateChatReading(obj, allowedRefs, haystack, { allowNoLead = false } = {}) {
+function validateChatReading(obj, allowedRefs, haystack, { allowNoLead = false, noLeadMax = 400 } = {}) {
   if (!obj || typeof obj !== "object") return null;
   const lead = String(obj.lead || "").replace(/\s+/g, " ").trim();
   const reply = String(obj.reply || obj.explanation || "").trim();
@@ -1359,13 +1413,17 @@ function validateChatReading(obj, allowedRefs, haystack, { allowNoLead = false }
     return false;
   };
   if (!lead && allowNoLead) {
-    // Small-talk reply (Nov 14, 2026): no lead passage, and the fences
-    // invert — the reply must be brief and carry NO Scripture content
-    // at all: no named reference, no quotation, no link, no headings.
-    if (reply.length < 10 || reply.length > 400) return null;
+    // No-lead reply (Nov 14, 2026): small talk first, and later the
+    // same night an off-purpose steering reply — no lead passage, and
+    // the fences invert: the reply must be brief and carry NO
+    // Scripture content at all: no named reference, no quotation, no
+    // link, no headings. Steering replies get a wider bound via
+    // noLeadMax — a warm decline plus the invitation to the life
+    // question underneath runs longer than a greeting.
+    if (reply.length < 10 || reply.length > noLeadMax) return null;
     if (/https?:\/\//i.test(reply)) return null;
-    if ((reply.match(REF_RE) || []).length || (reply.match(CHAPTER_REF_RE) || []).length) { console.log("[WC-CHAT] fail smalltalk-citation"); return null; }
-    if (extractQuotedSpans(reply).some((q) => normalizeForQuote(q))) { console.log("[WC-CHAT] fail smalltalk-quote"); return null; }
+    if ((reply.match(REF_RE) || []).length || (reply.match(CHAPTER_REF_RE) || []).length) { console.log("[WC-CHAT] fail nolead-citation"); return null; }
+    if (extractQuotedSpans(reply).some((q) => normalizeForQuote(q))) { console.log("[WC-CHAT] fail nolead-quote"); return null; }
     if (hasHeadings()) { console.log("[WC-CHAT] fail fences-headings"); return null; }
     return { lead: null, reply };
   }
@@ -1393,7 +1451,7 @@ function validateChatReading(obj, allowedRefs, haystack, { allowNoLead = false }
 // attempt fails the fences or the transport. Returns { lead, reply }
 // or null; null always means "use the template reply". This function
 // never throws.
-async function readChatWithGemini({ message, history, fullPassages, earlierPassages = [], smallTalk = false }) {
+async function readChatWithGemini({ message, history, fullPassages, earlierPassages = [], smallTalk = false, steer = false }) {
   const key = process.env.GEMINI_API_KEY;
   if (!key || !fullPassages || !fullPassages.length) { console.log("[WC-CHAT] fail no-key-or-passages"); return null; }
   const all = [...fullPassages, ...earlierPassages];
@@ -1413,6 +1471,9 @@ async function readChatWithGemini({ message, history, fullPassages, earlierPassa
     `Visitor's new message:\n${message}\n\n` +
     (smallTalk
       ? `This message is small talk — a greeting, thanks, or farewell, not a question. Reply briefly and warmly, like a person: a sentence or two, and if it fits, invite them to share what's on their mind. Do NOT explain a passage, do NOT quote or name any Scripture. Return {"lead": null, "reply": "<your brief reply>"}.\n\n`
+      : "") +
+    (steer
+      ? `This message asks you to do task work outside your purpose — writing, coding, homework, and the like. You are a Bible guide for life's questions, not a general task assistant. Reply in one or two warm sentences: politely decline, and invite the life question underneath it — if something in their life is weighing on them, you would love to look at what Scripture says about that together. Do NOT do any part of the task, do NOT explain a passage, do NOT quote or name any Scripture. Return {"lead": null, "reply": "<your brief reply>"}.\n\n`
       : "") +
     `Passages the search retrieved for this message (quote ONLY from these and the earlier passages below, word for word; name no others):\n${material}${earlier}`;
   const haystack = all.map((p) => p.text).join("\n");
@@ -1451,7 +1512,7 @@ async function readChatWithGemini({ message, history, fullPassages, earlierPassa
       if (!text) { console.log("[WC-CHAT] fail empty"); return null; }
       let obj;
       try { obj = JSON.parse(text); } catch { console.log("[WC-CHAT] fail bad-json"); return null; }
-      const reading = validateChatReading(obj, refs, haystack, { allowNoLead: smallTalk });
+      const reading = validateChatReading(obj, refs, haystack, { allowNoLead: smallTalk || steer, noLeadMax: steer ? 500 : 400 });
       if (!reading) { console.log("[WC-CHAT] fail fences"); return null; }
       console.log("[WC-CHAT] ok");
       return reading;
@@ -1471,7 +1532,9 @@ async function readChatWithGemini({ message, history, fullPassages, earlierPassa
     // while its instincts run to Philippians 4). The retry names the
     // rules it broke and asks again; still free tier, still fenced,
     // and a second failure falls back exactly as before.
-    const note = smallTalk
+    const note = steer
+      ? `\n\nCorrection: your previous reply was rejected. Keep it to one or two brief, warm sentences: politely decline the task and invite the life question underneath it; return lead as null; include NO Scripture quotation, NO passage name, and no quotation marks at all.`
+      : smallTalk
       ? `\n\nCorrection: your previous reply was rejected. Keep it to a brief, warm sentence or two, return lead as null, and include NO Scripture quotation and NO passage name at all.`
       : `\n\nCorrection: your previous reply was rejected for breaking a grounding rule. This time: name NO passage outside the list above, however fitting it seems; copy every quotation from the listed texts exactly, word for word; use quotation marks for nothing else; use no headings; keep it conversational and answer the visitor directly.`;
     await sleep(1200);
@@ -1486,7 +1549,9 @@ async function readChatWithGemini({ message, history, fullPassages, earlierPassa
     // and the visitor still sees the lead passage's full verbatim
     // text in the quote block the server itself renders. For small
     // talk the final attempt simply repeats the correction.
-    const note3 = smallTalk
+    const note3 = steer
+      ? `\n\nCorrection: your previous replies were rejected. Keep it to one or two brief, warm sentences: politely decline the task and invite the life question underneath it; return lead as null; include NO Scripture quotation, NO passage name, and no quotation marks at all.`
+      : smallTalk
       ? `\n\nCorrection: your previous reply was rejected. Keep it to a brief, warm sentence or two, return lead as null, and include NO Scripture quotation and NO passage name at all.`
       : `\n\nFinal correction: your previous replies were rejected. Answer in plain conversational prose with NO quotation marks anywhere in your reply — refer to passages by name only (for example: Proverbs 22:7 warns that…), choosing names ONLY from the list above. No headings, no lists of sections — just talk to the visitor.`;
     await sleep(2000);
@@ -1506,6 +1571,15 @@ function greetingFallbackFor(message) {
   if (/\bthank/.test(t)) return "You're very welcome. If something else comes to mind — a decision, a worry, anything at all — just ask, and we'll look at it together.";
   if (/\b(bye|goodbye|good night|see you)\b/.test(t)) return "Goodbye for now — come back any time. I'll be here whenever you need a word of wisdom for the road.";
   return "Hello — good to see you. What's on your mind today? Tell me what you're facing, and we'll see what the Bible says about it together.";
+}
+
+// Last-resort reply for a steering turn whose composer call failed
+// (Nov 14, 2026): an off-purpose task request must never ship the
+// search template either — that would dress a decline up as a passage
+// answer — so it falls back to the plain decline instead. Ordinary
+// questions never reach this.
+function steeringFallbackFor() {
+  return "That's outside what I'm here for — I'm a guide for life's questions, not a task assistant. But if there's a life question underneath it — something you're facing or deciding — ask me that, and we'll see what the Bible says about it together.";
 }
 
 // One section's body out of the search's assembled template text (the
@@ -1534,7 +1608,12 @@ function extractGuidanceSection(guidance, label) {
 // turn (one corrective retry on a fence failure), the same grounding
 // fences (the chat validator adds a no-section-headings rule of its
 // own — see the chat composer section), and a silent fallback to a
-// template reply assembled from the search's own words. Crisis
+// template reply assembled from the search's own words. An
+// off-purpose task request (see isOffTopicTask) takes a steering lane
+// shaped like small talk's: a brief, warm decline that invites the
+// life question underneath, composed under the same inverted fences,
+// with a plain local decline as its fallback — never the template,
+// never a fake passage answer. Crisis
 // wording in any message takes the local crisis path — zero Gemini
 // calls — exactly as in the ask flow.
 async function handleChatTurn(req, res) {
@@ -1580,9 +1659,11 @@ async function handleChatTurn(req, res) {
   if (!answer) return res.status(500).json({ error: "Something went wrong. Please try again." });
   const crisis = !!(answer.parts && answer.parts.crisis);
   const smallTalk = !crisis && isSmallTalk(message);
+  const steer = !crisis && !smallTalk && isOffTopicTask(message);
   let composed = false;
   let reply = "";
   let greetingReply = false;
+  let steerReply = false;
   // The full texts the response's quote block may draw on: this turn's
   // retrieved passages, widened below with any earlier lead passages
   // the composer was allowed to lean on.
@@ -1612,6 +1693,7 @@ async function handleChatTurn(req, res) {
       fullPassages: answer.parts.fullPassages,
       earlierPassages,
       smallTalk,
+      steer,
     }).catch(() => null);
     if (r && r.lead) {
       const ordered = [r.lead, ...answer.parts.refs.filter((x) => x !== r.lead)];
@@ -1621,14 +1703,16 @@ async function handleChatTurn(req, res) {
       reply = r.reply;
       composed = true;
     } else if (r) {
-      // Small-talk reply: no lead passage, nothing to rebuild — the
-      // reply stands alone and the response carries no quote block.
+      // No-lead reply (small talk or steering): no lead passage,
+      // nothing to rebuild — the reply stands alone and the response
+      // carries no quote block.
       reply = r.reply;
       composed = true;
-      greetingReply = true;
+      if (steer) steerReply = true; else greetingReply = true;
     }
   }
   if (!reply && smallTalk) { reply = greetingFallbackFor(message); greetingReply = true; }
+  if (!reply && steer) { reply = steeringFallbackFor(); steerReply = true; }
   let templateReply = false;
   if (!reply) {
     // Template reply: the search's own plain-language guidance and
@@ -1648,9 +1732,11 @@ async function handleChatTurn(req, res) {
   // (their care text lives there) but are NEVER busy: the care path
   // is local and instant, and composition is skipped for them by
   // design. Small talk never reaches the template block (the greeting
-  // fallback answers it), and a composed turn sets composed instead.
+  // fallback answers it), steering turns never reach it either (the
+  // steering fallback answers them), and a composed turn sets composed
+  // instead.
   const busyFallback = templateReply && !crisis;
-  const leadRef = greetingReply ? null : (answer.meta && answer.meta.leadRef) || null;
+  const leadRef = (greetingReply || steerReply) ? null : (answer.meta && answer.meta.leadRef) || null;
   const panel = answer.passages || {};
   // The quote block and the supporting passages carry the full texts
   // the reader was handed (flowing text, no verse numbers — the chat
@@ -1661,7 +1747,7 @@ async function handleChatTurn(req, res) {
   const translationName = (answer.meta && answer.meta.translation) === "kjv" ? "King James Version" : "Berean Standard Bible";
   const leadEntry = leadRef ? panel[leadRef] : null;
   const orderedRefs = (answer.meta && answer.meta.refs) || [];
-  const supporting = greetingReply ? [] : orderedRefs
+  const supporting = (greetingReply || steerReply) ? [] : orderedRefs
     .filter((ref) => ref !== leadRef && (fullByRef.has(ref) || panel[ref]))
     .slice(0, 2)
     .map((ref) => ({
