@@ -17,6 +17,13 @@
 .chat-video{max-width:340px;margin:6px auto 8px}
 .chat-video video{display:block;width:100%;aspect-ratio:2/3;border-radius:16px;background:#0f172a}
 .chat-panel{max-width:840px;margin:24px auto 0}
+.trans-switch{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px}
+.trans-label{font-weight:900;color:#1e3a5f;font-size:15px}
+.trans-btn{min-height:44px;padding:8px 16px;border-radius:999px;border:1px solid #1e3a5f;background:#fff;color:#1e3a5f;font-weight:700;cursor:pointer;font-size:15px}
+.trans-btn.active{background:#1e3a5f;color:#fff}
+.gate-panel{max-width:840px;margin:24px auto 0}
+.gate-panel h2{margin-top:0}
+#gateContinue{min-height:60px;font-size:19px;width:100%;margin-top:8px}
 .chat-log{display:flex;flex-direction:column;gap:14px;max-height:62vh;overflow-y:auto;padding:4px 2px 14px;scroll-behavior:smooth}
 .bubble{max-width:88%;padding:16px 18px;border-radius:20px;font-size:18px;line-height:1.6}
 .bubble p{margin:0 0 10px}
@@ -48,7 +55,20 @@
 <main><section class="tool-page"><section class="tool-intro" style="text-align:center"><p class="eyebrow">Live Chat</p><h1>Ask Hannah</h1></section>
 <div class="chat-video"><video controls preload="none" playsinline poster="/media/welcome-intro-poster.jpg" src="/media/welcome-intro.mp4"></video></div>
 <p class="page-lead" style="text-align:center;margin-left:auto;margin-right:auto">Hannah answers from the Bible, in plain words. Ask in your own words &mdash; type below, or tap the big red microphone and just say it out loud. Ask follow-ups, too: she remembers what you have been talking about.</p>
-<section class="panel chat-panel">
+<section class="panel gate-panel" id="disclaimerGate">
+<h2>Before you ask, please read</h2>
+<p>WisdomCompass offers spiritual and practical wisdom from the Bible &mdash; guidance only. It is <strong>not</strong> legal, medical, mental health, financial, emergency, or professional advice, and it does not replace a pastor, counselor, or professional you trust.</p>
+<p>If there is danger, abuse, self-harm, or another urgent situation, contact emergency services (911), call or text <strong>988</strong>, or reach a trusted professional right away &mdash; do not wait on a website.</p>
+<p>Hannah will show you what Scripture says, and a wiser next step. The decision always stays yours.</p>
+<p class="microcopy">Full text: <a href="/disclaimer">Disclaimer</a> &middot; <a href="/privacy">Privacy</a> &middot; <a href="/terms">Terms</a></p>
+<button class="button primary" id="gateContinue" type="button">I understand &mdash; continue to Chat with Hannah</button>
+</section>
+<section class="panel chat-panel" id="chatPanel" hidden>
+<div class="trans-switch" role="group" aria-label="Bible text">
+<span class="trans-label">Bible text:</span>
+<button type="button" id="transBsb" class="trans-btn">Berean Standard</button>
+<button type="button" id="transKjv" class="trans-btn">King James</button>
+</div>
 <div id="chatLog" class="chat-log" aria-live="polite"></div>
 <div class="chat-composer">
 <label for="chatInput">Your question for Hannah</label>
@@ -59,7 +79,7 @@
 <button class="button secondary" id="chatNew" type="button">New conversation</button>
 </div>
 <p class="microcopy" id="chatStatus" style="min-height:20px"></p>
-<p class="microcopy">WisdomCompass gives biblical guidance only &mdash; not professional, medical, legal, or emergency advice. If you are in crisis, call or text <strong>988</strong> any time, free. Prefer the full written answer? Use the <a href="/guidance">Decision Guidance tool</a>.</p>
+<p class="microcopy">WisdomCompass gives biblical guidance only &mdash; not professional, medical, legal, or emergency advice. If you are in crisis, call or text <strong>988</strong> any time, free. Passages are shown in the Berean Standard Bible &mdash; or tap King James at the top of this panel to switch; your choice is remembered on this device.</p>
 </div>
 </section>
 </section></main>
@@ -74,12 +94,14 @@ const chatStatus = document.getElementById("chatStatus");
 
 // The conversation lives only in this page's memory — nothing is
 // stored on the device or the server beyond the site's anonymous
-// question log (one row per question, no identity), exactly as with
-// the Decision Guidance tool. A page refresh starts over.
+// question log (one row per question, no identity). A page refresh
+// starts over.
 let history = [];
 let busy = false;
-// Same Bible-text choice as the guidance tool (Berean by default,
-// King James one tap away there); remembered on this device.
+let lastExchange = null;
+// Bible-text choice: Berean Standard Bible by default, King James
+// one tap away in the switch at the top of this panel; remembered
+// on this device.
 let currentTranslation = "bsb";
 try { if (localStorage.getItem("wcTranslation") === "kjv") currentTranslation = "kjv"; } catch (e) {}
 
@@ -154,6 +176,7 @@ async function sendChat() {
   chatLog.appendChild(thinking);
   scrollChat();
   chatStatus.textContent = "";
+  const historyBefore = history.slice();
   try {
     const response = await fetch("/api/guidance", {
       method: "POST",
@@ -163,7 +186,8 @@ async function sendChat() {
     const data = await response.json();
     if (!response.ok || !data.reply) throw new Error(data.error || "Unable to answer just now.");
     thinking.remove();
-    addHannahBubble(data);
+    const bubble = addHannahBubble(data);
+    lastExchange = { text: text, historyBefore: historyBefore, bubble: bubble };
     history.push({ role: "user", text: text });
     const turn = { role: "hannah", text: data.reply };
     if (data.leadRef) turn.leadRef = data.leadRef;
@@ -186,6 +210,7 @@ chatInput.addEventListener("keydown", (e) => {
 });
 chatNew.addEventListener("click", () => {
   history = [];
+  lastExchange = null;
   chatLog.innerHTML = "";
   chatStatus.textContent = "";
   addGreeting();
@@ -231,6 +256,84 @@ if (SpeechRecognitionImpl && chatMic && chatInput) {
     } catch (e) { /* recognition already running */ }
   });
 }
+
+// The Disclaimer comes first: the chat panel stays hidden until the
+// visitor taps the continue button on the disclaimer panel above it.
+// Once seen, it does not block again in the same browser session.
+const chatPanel = document.getElementById("chatPanel");
+const disclaimerGate = document.getElementById("disclaimerGate");
+const gateContinue = document.getElementById("gateContinue");
+function openChat() {
+  if (disclaimerGate) disclaimerGate.hidden = true;
+  if (chatPanel) chatPanel.hidden = false;
+}
+let gateSeen = false;
+try { gateSeen = sessionStorage.getItem("wcDisclaimerSeen") === "1"; } catch (e) {}
+if (gateSeen) openChat();
+if (gateContinue) gateContinue.addEventListener("click", () => {
+  try { sessionStorage.setItem("wcDisclaimerSeen", "1"); } catch (e) {}
+  openChat();
+  chatInput.focus();
+});
+
+// The Bible-text switch: Berean Standard Bible or King James.
+// Switching remembers the choice on this device and, when Hannah has
+// already answered, asks her the same last question again so the
+// answer above is re-shown in the newly chosen text.
+const transBsb = document.getElementById("transBsb");
+const transKjv = document.getElementById("transKjv");
+function paintTransButtons() {
+  const kjv = currentTranslation === "kjv";
+  if (transBsb) { transBsb.classList.toggle("active", !kjv); transBsb.setAttribute("aria-pressed", String(!kjv)); }
+  if (transKjv) { transKjv.classList.toggle("active", kjv); transKjv.setAttribute("aria-pressed", String(kjv)); }
+}
+function setTranslation(t) {
+  currentTranslation = t === "kjv" ? "kjv" : "bsb";
+  try { localStorage.setItem("wcTranslation", currentTranslation); } catch (e) {}
+  paintTransButtons();
+}
+async function switchTranslation(t) {
+  if (t === currentTranslation) { setTranslation(t); return; }
+  setTranslation(t);
+  const name = currentTranslation === "kjv" ? "King James Version" : "Berean Standard Bible";
+  if (!lastExchange || busy) { chatStatus.textContent = "Bible text: " + name + "."; return; }
+  busy = true;
+  chatSend.disabled = true;
+  const ex = lastExchange;
+  ex.bubble.className = "bubble hannah thinking";
+  ex.bubble.innerHTML = '<div class="who">Hannah</div><p>Hannah is searching Scripture&hellip;</p>';
+  scrollChat();
+  try {
+    const response = await fetch("/api/guidance", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat: true, message: ex.text, history: ex.historyBefore, translation: currentTranslation })
+    });
+    const data = await response.json();
+    if (!response.ok || !data.reply) throw new Error(data.error || "Unable to answer just now.");
+    const fresh = addHannahBubble(data);
+    ex.bubble.className = fresh.className;
+    ex.bubble.innerHTML = fresh.innerHTML;
+    fresh.remove();
+    history = ex.historyBefore.slice();
+    history.push({ role: "user", text: ex.text });
+    const turn = { role: "hannah", text: data.reply };
+    if (data.leadRef) turn.leadRef = data.leadRef;
+    history.push(turn);
+    history = history.slice(-12);
+    chatStatus.textContent = "Bible text: " + name + " \u2014 Hannah's answer above now uses that text.";
+  } catch (e) {
+    ex.bubble.className = "bubble hannah";
+    ex.bubble.innerHTML = '<div class="who">Hannah</div><p>I could not switch the Bible text just then \u2014 the answer above is still in the previous text. Please ask again.</p>';
+    chatStatus.textContent = "The Bible text could not be switched just now.";
+  } finally {
+    busy = false;
+    chatSend.disabled = false;
+  }
+}
+if (transBsb) transBsb.addEventListener("click", () => switchTranslation("bsb"));
+if (transKjv) transKjv.addEventListener("click", () => switchTranslation("kjv"));
+paintTransButtons();
 
 addGreeting();
 </script>
