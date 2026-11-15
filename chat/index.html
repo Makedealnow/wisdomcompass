@@ -92,6 +92,26 @@ const chatMic = document.getElementById("chatMic");
 const chatNew = document.getElementById("chatNew");
 const chatStatus = document.getElementById("chatStatus");
 
+// A prefill link — the "Ask about this" buttons under Hannah's
+// videos and the question links on the decision pages — carries its
+// question in the address: /chat?q=... That question arrives already
+// asked: when the chat opens, it is placed in the box and sent, so
+// the visitor lands on the question and Hannah's answer, ready to
+// follow up. A plain /chat arrival carries no q and opens with an
+// empty box, as before.
+let prefillQuestion = "";
+try {
+  const q = new URLSearchParams(window.location.search).get("q");
+  if (q) prefillQuestion = q.replace(/\s+/g, " ").trim().slice(0, 300);
+} catch (e) {}
+let prefillAsked = false;
+function askPrefill() {
+  if (prefillAsked || !prefillQuestion) return;
+  prefillAsked = true;
+  chatInput.value = prefillQuestion;
+  sendChat();
+}
+
 // The conversation lives only in this page's memory — nothing is
 // stored on the device or the server beyond the site's anonymous
 // question log (one row per question, no identity). A page refresh
@@ -276,6 +296,11 @@ const gateContinue = document.getElementById("gateContinue");
 function openChat() {
   if (disclaimerGate) disclaimerGate.hidden = true;
   if (chatPanel) chatPanel.hidden = false;
+  // A prefill question asks itself the moment the chat opens — on
+  // load when the disclaimer was already seen this session, or right
+  // after the visitor taps "I understand" when it was not. Deferred
+  // a tick so Hannah's greeting is placed in the log first.
+  if (prefillQuestion && !prefillAsked) setTimeout(askPrefill, 0);
 }
 let gateSeen = false;
 try { gateSeen = sessionStorage.getItem("wcDisclaimerSeen") === "1"; } catch (e) {}
