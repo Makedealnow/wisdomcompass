@@ -1613,7 +1613,11 @@ function extractGuidanceSection(guidance, label) {
 // shaped like small talk's: a brief, warm decline that invites the
 // life question underneath, composed under the same inverted fences,
 // with a plain local decline as its fallback — never the template,
-// never a fake passage answer. Crisis
+// never a fake passage answer. A translation-switch re-ask carries
+// the previous answer's passages pinned (pinnedLead/pinnedRefs), and
+// the turn is then answered from exactly those passages fetched in
+// the newly chosen translation — the switch swaps the same answer's
+// text, never re-searches (Jeff's Nov 8, 2026 spec). Crisis
 // wording in any message takes the local crisis path — zero Gemini
 // calls — exactly as in the ask flow.
 async function handleChatTurn(req, res) {
@@ -1634,6 +1638,25 @@ async function handleChatTurn(req, res) {
       history.push(item);
     }
   }
+  // Translation-switch re-ask (Nov 14, 2026): when the visitor flips
+  // the Bible-text switch, the client re-sends the last question with
+  // that answer's passages pinned (pinnedLead + pinnedRefs, copied
+  // from the previous response's own leadRef/refs). Jeff's standing
+  // spec for the switch (Nov 8, 2026) is that it "swaps same answer":
+  // the same passages in the other translation's wording — but the
+  // fresh search a plain re-ask runs scans the NEW translation's own
+  // text, so its ranking landed on entirely different passages (a
+  // divorce answer led by Isaiah 50:1 in the BSB came back led by a
+  // Jeremiah passage in the KJV; Jeff caught it on his phone). The
+  // pinned set is applied below, on the answering path only. The
+  // strings are sanitized here like the history's leadRefs; whether
+  // each one may actually be served is decided at apply time against
+  // the site's own passage data — a pinned ref the data cannot serve
+  // in the requested translation is dropped, never trusted.
+  const pinnedLeadIn = typeof req.body?.pinnedLead === "string" ? req.body.pinnedLead.trim().slice(0, 80) : "";
+  const pinnedRefsIn = Array.isArray(req.body?.pinnedRefs)
+    ? req.body.pinnedRefs.filter((r) => typeof r === "string").map((r) => r.trim().slice(0, 80)).filter(Boolean).slice(0, 9)
+    : [];
   const search = loadSearch();
   // Interpreted question for the search. A crisis message always
   // searches on its own words, so the care-first assembly triggers
@@ -1660,6 +1683,43 @@ async function handleChatTurn(req, res) {
   const crisis = !!(answer.parts && answer.parts.crisis);
   const smallTalk = !crisis && isSmallTalk(message);
   const steer = !crisis && !smallTalk && isOffTopicTask(message);
+  // Pinned passage set (see the parsing note above): on the answering
+  // path only — crisis turns keep their local care assembly, and the
+  // small-talk and steering lanes carry no passages at all. Each
+  // pinned ref is validated against the site's own passage data in
+  // the requested translation (search.passageText serves a ref from
+  // the data or returns null); unservable refs drop out one by one,
+  // and if none survive, the turn simply keeps the fresh search's own
+  // ranking, exactly as an unpinned re-ask did. When the set holds,
+  // it REPLACES the fresh ranking everywhere the turn draws passages
+  // from — the composer's handed texts, the panel rebuild (so the
+  // quote block and supporting passages are these refs in the new
+  // translation), the template assembly behind the busy fallback, and
+  // the response's lead/refs — so no fresh search decides this turn's
+  // passages. Grounding is unchanged: pinned refs only ever originate
+  // from this search's own prior responses, and the composer stays
+  // fenced to the set it is handed.
+  if (!crisis && !smallTalk && !steer && answer.parts && (pinnedLeadIn || pinnedRefsIn.length)) {
+    const pinnedValid = [];
+    const pinnedSeen = new Set();
+    for (const ref of [pinnedLeadIn, ...pinnedRefsIn]) {
+      if (!ref || pinnedSeen.has(ref)) continue;
+      pinnedSeen.add(ref);
+      const text = search.passageText(ref, translation);
+      if (text) pinnedValid.push({ ref, text });
+    }
+    if (pinnedValid.length) {
+      const lead = pinnedValid.some((p) => p.ref === pinnedLeadIn) ? pinnedLeadIn : pinnedValid[0].ref;
+      const orderedPinned = [lead, ...pinnedValid.map((p) => p.ref).filter((r) => r !== lead)];
+      const pinnedText = new Map(pinnedValid.map((p) => [p.ref, p.text]));
+      answer.parts.refs = orderedPinned;
+      answer.parts.fullPassages = orderedPinned.map((ref) => ({ ref, text: pinnedText.get(ref) }));
+      const rebuiltPinned = answer.parts.rebuild(orderedPinned, null);
+      answer.passages = rebuiltPinned.passages;
+      answer.guidance = rebuiltPinned.guidance;
+      answer.meta = { ...answer.meta, leadRef: lead, refs: orderedPinned };
+    }
+  }
   let composed = false;
   let reply = "";
   let greetingReply = false;

@@ -194,7 +194,11 @@ async function sendChat() {
     if (!response.ok || !data.reply) throw new Error(data.error || "Unable to answer just now.");
     thinking.remove();
     const bubble = addHannahBubble(data);
-    lastExchange = { text: text, historyBefore: historyBefore, bubble: bubble };
+    // The exchange's passage set is kept with it: the Bible-text
+    // switch re-asks this question with these very passages pinned,
+    // so the same answer comes back in the other translation (see
+    // switchTranslation below).
+    lastExchange = { text: text, historyBefore: historyBefore, bubble: bubble, leadRef: data.leadRef || null, refs: Array.isArray(data.refs) ? data.refs.slice() : [] };
     history.push({ role: "user", text: text });
     const turn = { role: "hannah", text: data.reply };
     if (data.leadRef) turn.leadRef = data.leadRef;
@@ -285,8 +289,10 @@ if (gateContinue) gateContinue.addEventListener("click", () => {
 
 // The Bible-text switch: Berean Standard Bible or King James.
 // Switching remembers the choice on this device and, when Hannah has
-// already answered, asks her the same last question again so the
-// answer above is re-shown in the newly chosen text.
+// already answered, re-asks the same last question WITH THAT ANSWER'S
+// PASSAGES PINNED, so the answer above is the same answer — same
+// passages, same lead — re-shown in the newly chosen text, never a
+// fresh search that might land on different passages.
 const transBsb = document.getElementById("transBsb");
 const transKjv = document.getElementById("transKjv");
 function paintTransButtons() {
@@ -314,7 +320,7 @@ async function switchTranslation(t) {
     const response = await fetch("/api/guidance", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat: true, message: ex.text, history: ex.historyBefore, translation: currentTranslation })
+      body: JSON.stringify({ chat: true, message: ex.text, history: ex.historyBefore, translation: currentTranslation, ...(ex.leadRef ? { pinnedLead: ex.leadRef, pinnedRefs: ex.refs || [] } : {}) })
     });
     const data = await response.json();
     if (!response.ok || !data.reply) throw new Error(data.error || "Unable to answer just now.");
@@ -322,6 +328,10 @@ async function switchTranslation(t) {
     ex.bubble.className = fresh.className;
     ex.bubble.innerHTML = fresh.innerHTML;
     fresh.remove();
+    // The re-shown answer's passage set replaces the stored one, so
+    // switching back pins the same passages again.
+    ex.leadRef = data.leadRef || null;
+    ex.refs = Array.isArray(data.refs) ? data.refs.slice() : [];
     history = ex.historyBefore.slice();
     history.push({ role: "user", text: ex.text });
     const turn = { role: "hannah", text: data.reply };
