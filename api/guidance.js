@@ -1467,6 +1467,20 @@ async function readChatWithGemini({ message, history, fullPassages, earlierPassa
     reading = await attempt(userPrompt + note);
     if (reading) console.log("[WC-CHAT] ok-on-retry");
   }
+  if (!reading) {
+    // Final attempt (Nov 14, 2026 — live battery finding): drop inline
+    // quotations entirely. The verbatim-quote fence is the most
+    // brittle of the fences, and a reply that quotes nothing cannot
+    // fail it; the coverage fence still binds every passage NAMED,
+    // and the visitor still sees the lead passage's full verbatim
+    // text in the quote block the server itself renders. For small
+    // talk the final attempt simply repeats the correction.
+    const note3 = smallTalk
+      ? `\n\nCorrection: your previous reply was rejected. Keep it to a brief, warm sentence or two, return lead as null, and include NO Scripture quotation and NO passage name at all.`
+      : `\n\nFinal correction: your previous replies were rejected. Answer in plain conversational prose with NO quotation marks anywhere in your reply — refer to passages by name only (for example: Proverbs 22:7 warns that…), choosing names ONLY from the list above. No headings, no lists of sections — just talk to the visitor.`;
+    reading = await attempt(userPrompt + note3);
+    if (reading) console.log("[WC-CHAT] ok-on-final-attempt");
+  }
   return reading;
 }
 
