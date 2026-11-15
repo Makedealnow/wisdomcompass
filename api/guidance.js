@@ -1699,6 +1699,7 @@ async function handleChatTurn(req, res) {
   // passages. Grounding is unchanged: pinned refs only ever originate
   // from this search's own prior responses, and the composer stays
   // fenced to the set it is handed.
+  let pinnedApplied = false;
   if (!crisis && !smallTalk && !steer && answer.parts && (pinnedLeadIn || pinnedRefsIn.length)) {
     const pinnedValid = [];
     const pinnedSeen = new Set();
@@ -1709,6 +1710,7 @@ async function handleChatTurn(req, res) {
       if (text) pinnedValid.push({ ref, text });
     }
     if (pinnedValid.length) {
+      pinnedApplied = true;
       const lead = pinnedValid.some((p) => p.ref === pinnedLeadIn) ? pinnedLeadIn : pinnedValid[0].ref;
       const orderedPinned = [lead, ...pinnedValid.map((p) => p.ref).filter((r) => r !== lead)];
       const pinnedText = new Map(pinnedValid.map((p) => [p.ref, p.text]));
@@ -1735,9 +1737,14 @@ async function handleChatTurn(req, res) {
     // retrieval happened to cover it — the fence then rejected the
     // natural answer and the raw template shipped. The last two
     // distinct earlier leads join the composer's allowed set, fetched
-    // from the search's own texts in the visitor's translation.
+    // from the search's own texts in the visitor's translation. On a
+    // pinned translation-switch turn they do NOT join: the switch
+    // swaps the same answer, so the composer's whole allowed set is
+    // the pinned set and its lead cannot wander to an earlier turn's
+    // passage — the re-rendered reply comes from the pinned passages
+    // alone (the conversation story still gives it context).
     const earlierPassages = [];
-    {
+    if (!pinnedApplied) {
       const have = new Set(chatFullPassages.map((p) => p.ref));
       for (const h of [...history].reverse()) {
         if (earlierPassages.length >= 2) break;
