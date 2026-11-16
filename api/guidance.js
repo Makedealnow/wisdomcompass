@@ -1189,6 +1189,14 @@ function categoryOf(question) {
 // missing section — falls back silently to the search's own template
 // assembly, unchanged. With no key set, nothing in this section runs.
 const GEMINI_MODEL = "gemini-3.5-flash-lite";
+// Fallback model (Nov 16, 2026 fix, second stage): a DIFFERENT
+// free-tier model with its own capacity pool, tried when the primary
+// fails. Measured live that day: at the same moment gemini-3.5-flash
+// -lite returned HTTP 503 UNAVAILABLE ("high demand") five times
+// running, gemini-3.1-flash-lite answered the identical substantive
+// request in 7.4s — the pools shed load independently, so a chain
+// across them lands turns that either model alone would lose.
+const GEMINI_MODEL_FALLBACK = "gemini-3.1-flash-lite";
 // Model choice (Nov 16, 2026 fix): gemini-3.5-flash stopped answering
 // inside this function's budget — measured live that day, the SAME
 // request shape took 106 seconds to return HTTP 200 (the key and the
@@ -1335,11 +1343,15 @@ async function readWithGemini({ question, fullPassages }) {
   const userPrompt =
     `Visitor's question:\n${question}\n\n` +
     `Passages the search retrieved (quote ONLY from these, word for word; name no others):\n${material}`;
+  // One call to one model; the caller walks the model chain. The
+  // per-try timeout is a share of the original single-call budget so
+  // two tries still fit the function's cap alongside the search.
+  const attemptRead = async (model) => {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), 12000);
   try {
     const resp = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
       {
         method: "POST",
         signal: controller.signal,
@@ -1368,6 +1380,16 @@ async function readWithGemini({ question, fullPassages }) {
   } finally {
     clearTimeout(timer);
   }
+  };
+  let reading = await attemptRead(GEMINI_MODEL);
+  if (!reading) {
+    // Second stage (Nov 16, 2026): the fallback model's capacity
+    // pool sheds load independently of the primary's — see the
+    // GEMINI_MODEL_FALLBACK note above.
+    reading = await attemptRead(GEMINI_MODEL_FALLBACK);
+    if (reading) console.log("[WC-READER] ok-on-fallback-model");
+  }
+  return reading;
 }
 
 // ---- Chat composer (Nov 14, 2026 — conversational rewrite) ----
@@ -1501,12 +1523,17 @@ async function readChatWithGemini({ message, history, fullPassages, earlierPassa
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   // One attempt: a single fenced Gemini call for the given prompt.
   // Returns the validated { lead, reply } or null on any failure.
-  const attempt = async (promptText, timeoutMs) => {
+  // The model is a parameter so the escalation can walk the model
+  // chain (Nov 16, 2026): the attempts alternate between the primary
+  // model and the fallback model, whose free-tier capacity pools
+  // shed load independently — a demand spike (HTTP 503) or a slow
+  // pool on one does not imply the other is down.
+  const attempt = async (promptText, timeoutMs, model = GEMINI_MODEL) => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const resp = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
         {
           method: "POST",
           signal: controller.signal,
@@ -1550,7 +1577,7 @@ async function readChatWithGemini({ message, history, fullPassages, earlierPassa
       ? `\n\nCorrection: your previous reply was rejected. Keep it to a brief, warm sentence or two, return lead as null, and include NO Scripture quotation and NO passage name at all.`
       : `\n\nCorrection: your previous reply was rejected for breaking a grounding rule. This time: name NO passage outside the list above, however fitting it seems; copy every quotation from the listed texts exactly, word for word; use quotation marks for nothing else; use no headings; keep it conversational and answer the visitor directly.`;
     await sleep(1200);
-    reading = await attempt(userPrompt + note, 10000);
+    reading = await attempt(userPrompt + note, 10000, GEMINI_MODEL_FALLBACK);
     if (reading) console.log("[WC-CHAT] ok-on-retry");
   }
   if (!reading && Date.now() - started < 19000) {
