@@ -1188,12 +1188,24 @@ function categoryOf(question) {
 // the candidate set, an invented reference, an altered quote, a
 // missing section — falls back silently to the search's own template
 // assembly, unchanged. With no key set, nothing in this section runs.
-const GEMINI_MODEL = "gemini-3.5-flash";
-// Token budget (Nov 9, 2026 fix): the gemini-3.5-flash alias now serves
-// a thinking model whose thought tokens count against maxOutputTokens.
-// The old 1800 cap let thinking consume the whole budget — the visible
-// JSON came back truncated mid-object (finishReason MAX_TOKENS) and
-// every reading failed the fences, so composed was always false in
+const GEMINI_MODEL = "gemini-3.5-flash-lite";
+// Model choice (Nov 16, 2026 fix): gemini-3.5-flash stopped answering
+// inside this function's budget — measured live that day, the SAME
+// request shape took 106 seconds to return HTTP 200 (the key and the
+// model were both fine; the free-tier thinking model was simply far
+// too slow that day), while every call here aborts at 8–15s inside a
+// 30s function cap. Every attempt timed out, so composed went false
+// on turn after turn and the busy template shipped at ordinary
+// single-visitor pacing — intermittently at first (the log shows
+// composed and busy turns interleaved from Nov 14 on), then on 3 of 3
+// turns in Jeff's Nov 16 test. gemini-3.5-flash-lite answered the
+// identical request in 2.5s. Still the free tier, still fenced
+// exactly as before; only the model name changed.
+// Token budget (Nov 9, 2026 fix): the flash alias serves a thinking
+// model whose thought tokens count against maxOutputTokens. The old
+// 1800 cap let thinking consume the whole budget — the visible JSON
+// came back truncated mid-object (finishReason MAX_TOKENS) and every
+// reading failed the fences, so composed was always false in
 // production. The reader now gets 8192 output tokens with thinking
 // capped at 1024, and 15s to finish (thinking + the full JSON reading
 // did not fit the old 8s abort budget either).
