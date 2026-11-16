@@ -19,7 +19,65 @@
 <main>
 <style>.wc-welcome-band{padding-top:20px;padding-bottom:4px;text-align:center}.wc-welcome-band .page-lead{margin-left:auto;margin-right:auto}.wc-welcome-band+.wc-hero-refresh{padding-top:30px}@media(max-width:860px){.wc-welcome-band{padding-top:16px;padding-bottom:2px}}</style>
 <section class="section wc-welcome-band"><div style="position:relative;width:100%;max-width:340px;margin:0 auto"><video id="wc-welcome-video" autoplay muted playsinline preload="auto" poster="media/welcome-intro-poster.jpg" src="media/guide-01-welcome.mp4" style="display:block;width:100%;aspect-ratio:2/3;border-radius:16px;background:#0f172a"></video><button id="wc-sound-btn" type="button" style="position:absolute;left:50%;bottom:16px;transform:translateX(-50%);background:#10243e;color:#fff;border:0;border-radius:999px;padding:10px 20px;font:inherit;font-size:15px;font-weight:600;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.35);white-space:nowrap">🔊 Tap for sound</button></div><p class="tiny" style="text-align:center;margin-top:12px">Welcome video with an AI-generated presenter.</p></section>
-<section class="section"><div class="cta-panel"><p class="eyebrow">Hannah Recommends</p><h2>A teaching I want you to hear</h2><div style="max-width:340px;margin:4px auto 0"><video controls preload="metadata" playsinline style="display:block;width:100%;border-radius:16px;background:#0f172a" src="/media/hannah-discerning-spirit.mp4"></video><p class="tiny" style="text-align:center;margin-top:10px">Video with an AI-generated presenter.</p></div><p style="margin-top:26px"><a class="button primary" href="https://www.intouch.org/watch/sermons/the-power-of-a-discerning-spirit" target="_blank" rel="noopener noreferrer">Watch &ldquo;The Power of a Discerning Spirit&rdquo; &mdash; In Touch Ministries</a></p></div></section>
+<section class="section"><div class="cta-panel"><p class="eyebrow">Hannah Recommends</p><h2>A teaching I want you to hear</h2><div style="max-width:340px;margin:4px auto 0"><video controls preload="metadata" playsinline style="display:block;width:100%;border-radius:16px;background:#0f172a" src="/media/hannah-discerning-spirit.mp4"></video><p class="tiny" style="text-align:center;margin-top:10px">Video with an AI-generated presenter.</p></div><p style="margin-top:26px"><a class="button primary" id="wc-stanley-link" href="https://www.intouch.org/watch/sermons/the-power-of-a-discerning-spirit" target="_blank" rel="noopener noreferrer">Watch &ldquo;The Power of a Discerning Spirit&rdquo; &mdash; In Touch Ministries</a></p></div></section>
+<style>.wc-rate-card{position:relative;max-width:640px;margin:0 auto;background:rgba(255,255,255,.86);border:1px solid #e5ded1;border-radius:20px;box-shadow:0 10px 30px rgba(30,58,95,.10);padding:22px 24px;text-align:center}.wc-rate-card p{margin:0 0 14px}.wc-rate-row{display:flex;flex-wrap:wrap;gap:10px;justify-content:center}.wc-rate-x{position:absolute;top:8px;right:10px;background:transparent;border:0;color:#667085;font-size:20px;line-height:1;min-height:auto;padding:6px 8px;cursor:pointer}</style>
+<section class="section" id="wc-stanley-prompt" hidden style="padding-top:0;padding-bottom:10px;margin-top:-28px"><div class="wc-rate-card"><button type="button" class="wc-rate-x" id="wc-rate-no" aria-label="No thanks">&times;</button><div id="wc-rate-body"><p>Last time you were here, you went to hear Dr. Charles Stanley&rsquo;s message on discernment. Was it worth your time?</p><div class="wc-rate-row"><button type="button" class="button secondary" id="wc-rate-up">&#128077; Worth it</button><button type="button" class="button secondary" id="wc-rate-down">&#128078; Not really</button></div></div><p id="wc-rate-thanks" hidden style="margin:0">Thanks for telling us.</p></div></section>
+<script>(function(){
+var CLICK='wcStanleyClick',DONE='wcStanleyDone',MIN=3*60*1000;
+var link=document.getElementById('wc-stanley-link');
+var card=document.getElementById('wc-stanley-prompt');
+function get(k){try{return localStorage.getItem(k);}catch(e){return null;}}
+function set(k,v){try{localStorage.setItem(k,v);}catch(e){}}
+function del(k){try{localStorage.removeItem(k);}catch(e){}}
+function send(payload){
+  var body;
+  try{body=JSON.stringify(payload);}catch(e){return;}
+  try{
+    if(navigator.sendBeacon&&navigator.sendBeacon('/api/stanley',new Blob([body],{type:'application/json'})))return;
+  }catch(e){}
+  try{fetch('/api/stanley',{method:'POST',headers:{'Content-Type':'application/json'},body:body,keepalive:true}).catch(function(){});}catch(e){}
+}
+if(link){link.addEventListener('click',function(){
+  send({event:'click'});
+  if(!get(DONE))set(CLICK,String(Date.now()));
+});}
+var shown=false,timer=null;
+function stopTimer(){if(timer){clearInterval(timer);timer=null;}}
+function eligible(){
+  if(get(DONE))return false;
+  var t=parseInt(get(CLICK)||'',10);
+  return !!t&&!isNaN(t)&&(Date.now()-t)>=MIN;
+}
+function maybeShow(){
+  if(shown||!card)return;
+  if(!eligible())return;
+  shown=true;
+  card.hidden=false;
+  stopTimer();
+}
+function dismiss(){
+  set(DONE,'1');del(CLICK);
+  if(card)card.hidden=true;
+  stopTimer();
+}
+function rate(v){
+  send({event:'rating',value:v});
+  set(DONE,'1');del(CLICK);
+  stopTimer();
+  var body=document.getElementById('wc-rate-body'),thanks=document.getElementById('wc-rate-thanks');
+  if(body)body.hidden=true;
+  if(thanks)thanks.hidden=false;
+  setTimeout(function(){if(card)card.hidden=true;},3500);
+}
+var up=document.getElementById('wc-rate-up'),down=document.getElementById('wc-rate-down'),no=document.getElementById('wc-rate-no');
+if(up)up.addEventListener('click',function(){rate('up');});
+if(down)down.addEventListener('click',function(){rate('down');});
+if(no)no.addEventListener('click',dismiss);
+maybeShow();
+document.addEventListener('visibilitychange',function(){if(!document.hidden)maybeShow();});
+window.addEventListener('focus',maybeShow);
+timer=setInterval(function(){if(!document.hidden)maybeShow();},15000);
+})();</script>
 <script>(function(){var v=document.getElementById('wc-welcome-video'),b=document.getElementById('wc-sound-btn');if(!v||!b)return;b.addEventListener('click',function(){v.currentTime=0;v.muted=false;v.play();b.style.display='none';});v.addEventListener('ended',function(){if(v.muted){b.style.display='';}});})();</script>
 <section class="section" id="ask"><div class="center-narrow"><p class="eyebrow">Free Guidance</p><h2>Ask Hannah your question</h2><p style="margin-top:26px"><a class="button primary" href="/chat">Chat with Hannah &mdash; ask out loud</a></p><p class="microcopy" style="max-width:560px;margin-left:auto;margin-right:auto">One question box for the whole site: Hannah&rsquo;s chat. Type your question, or say it out loud &mdash; she gives the answer.</p></div></section>
 <section class="section" id="watch"><p class="eyebrow">Watch Hannah</p><h2>Hannah answers real questions</h2><p class="page-lead">Short videos, straight from Scripture. Watch one — then ask your own question about the same thing.</p>
